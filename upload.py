@@ -11,6 +11,7 @@ parser.add_argument('-f', '--forcefw', help='upload fw even if already up to dat
 parser.add_argument('-u', '--upload_ini', help='upload.ini paramater set', default='upload.ini')
 parser.add_argument('-v', '--version_ini', help='fw version defs', default='version.ini')
 parser.add_argument('--onlineupdate', help='use online update files', action="store_true", default=False)
+parser.add_argument('--iprange', help='range of ip address to manage')
 args = parser.parse_args()
 
 config = configparser.ConfigParser(strict=False)
@@ -22,6 +23,10 @@ firmware.read(os.path.join('fw', args.version_ini))
 myIp = config['defaults']['myIp'] if 'myIp' in config['defaults'] else None
 
 gbl = Gblib()
+
+# add cmd line arg to ip list
+if args.iprange is not None:
+    config['hosts']['iprange'] = args.iprange
 
 for addrRange in config['hosts']:
     target = config['hosts'][addrRange]
