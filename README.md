@@ -11,7 +11,7 @@ automatically deploy configuration and/or firmware updates to multiple **Gude Sy
 
 - **which devices**
   - enable 'gbl=search' in upload.ini
-    - to run a 'search' Broadcast in local network(s)
+    - to run a 'search' Broadcast in your local network(s)
   - enable e.g. 'net1 = 192.168.1.0/24'
     - to probe a subnet
   - enable e.g. 'ip1 = 192.168.1.11' 
