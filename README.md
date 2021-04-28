@@ -69,3 +69,30 @@ automatically deploy configuration and/or firmware updates to multiple **Gude Sy
 - netifaces
 - requests
 
+# example
+```
+py D:/gude/upload.py/upload.py --onlineupdate --iprange 10.113.6.66
+ 
+trying 10.113.6.66...
+Expert Power Control 8041-1 (80xx) detected at 10.113.6.66 running Fimware Version '1.0.2'
+downloading http://files.gude.info/fw/gude/firmware-epc8031.json
+	expected FW 1.1.3 needsUpdate(True)
+uploading firmware-epc8031_v1.1.3.bin, please wait ... 
+upload complete, device reboots to extract firmware file, please wait...
+Rebooting...
+.
+.
+.
+.
+ 10.113.6.66:80 up
+device with IP 10.113.6.66 has hostame EPC-8041 and FW Version 1.1.3
+
+uploading config\config_00_19_32_00_e8_b6.txt, please wait ... 
+upload complete, device reboots to apply config file, please wait...
+Rebooting...
+.
+.
+.
+ 10.113.6.66:80 up
+device with IP 10.113.6.66 has hostame EPC-8041 and FW Version 1.1.3
+```
