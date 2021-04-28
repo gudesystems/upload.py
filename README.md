@@ -32,8 +32,8 @@ automatically deploy configuration and/or firmware updates to multiple **Gude Sy
     - this will download all binary files to fw/*.bin, and sets fw/version.ini accordingly
 
 
-- **which is configuration**
-  - when the firmware is already up to date or updated, upload.py can also deploy device config
+- **which configuration**
+  - when the firmware is already up to date or updated, upload.py can also deploy device configuration
   - if file exists, config/config_[MAC_ADD].txt is deployed to this device
     - e.g. **config/config_00_19_32_00_00_01.txt**
   - of otherwise, and if file exists, config/config_[IP].txt is deployed to this device
@@ -44,6 +44,7 @@ automatically deploy configuration and/or firmware updates to multiple **Gude Sy
 # create config
 - you can download / edit / down-strip / extend device's live configuration by downloading config.txt at each device's maintenance page
 - you can use CLI commands to create your desired config file
+  - a complete list of all CLI commands can be found in every device's PDF manual
 
 # Command Line Parameters
 | Param           | Default      | Usage
@@ -57,7 +58,7 @@ automatically deploy configuration and/or firmware updates to multiple **Gude Sy
 
 
 # HTTPS / Authentication
-- upload.py is using http to upload config and firmware
+- upload.py is using HTTP to upload config and firmware
 - using HTTPS and user Authetification can be enabled in upload.ini 
 - either tweak [httpDefaults] or the appropriate device section like e.g. [192.168.1.11]
   - ssl=1 enabled HTTPS
