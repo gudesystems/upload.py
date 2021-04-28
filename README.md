@@ -18,10 +18,10 @@ automatically deploy configuration and/or firmware updates to multiple **Gude Sy
     - to probe a single device unit
   - use 'upload.py --iprange 192.168.1.11'
     - to probe a single device unit
-  - or any combination of paramaters mentioned above
+  - or any combination of parameters mentioned above
 
 
-- **which firmare version**
+- **which firmware version**
   - use 'upload.py --onlineupdate to use the most recent internet firmware files
     - firmware binary files are automatically downloaded to fw/*.bin
   - to run offline updates
@@ -34,15 +34,15 @@ automatically deploy configuration and/or firmware updates to multiple **Gude Sy
 
 - **which is configuration**
   - when the firmware is already up to date or updated, upload.py can also deploy device config
-  - if file exists, config/config_[MAC_ADD].txt is deployed to this decvice
+  - if file exists, config/config_[MAC_ADD].txt is deployed to this device
     - e.g. **config/config_00_19_32_00_00_01.txt**
-  - of otherwise, and if file exists, config/config_[IP].txt is deployed to this decvice
+  - of otherwise, and if file exists, config/config_[IP].txt is deployed to this device
     - e.g. **config/config_192_168_1_10.txt**
   - of otherwise, and if file exists, **config/config.txt** is deployed to each device
  
     
 # create config
-- you can download / edit / downstrip / extend device's live configuration by downloading config.txt at each device's maintanace page
+- you can download / edit / down-strip / extend device's live configuration by downloading config.txt at each device's maintenance page
 - you can use CLI commands to create your desired config file
 
 # Command Line Parameters
@@ -56,12 +56,12 @@ automatically deploy configuration and/or firmware updates to multiple **Gude Sy
 | --configip      |              | if deploying a single device config, IP might change to this IP by config import 
 
 
-# HTTPS / authentification
+# HTTPS / Authentication
 - upload.py is using http to upload config and firmware
 - using HTTPS and user Authetification can be enabled in upload.ini 
-- either tweak [httpDefaults] or the apprortiate decvice section like e.g. [192.168.1.11]
+- either tweak [httpDefaults] or the appropriate device section like e.g. [192.168.1.11]
   - ssl=1 enabled HTTPS
-  - username / password sets up HTTP Basic Authentifaction 
+  - giving username / password sets up HTTP Basic Authentication 
 
 # required non-standard python modules
 - crcmod
