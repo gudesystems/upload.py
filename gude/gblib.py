@@ -1,9 +1,6 @@
-import sys
 import socket
-import netifaces # pip install netifaces
 from time import sleep
 import struct
-import crcmod # pip install crcmod
 
 
 class Gblib(object):
@@ -166,15 +163,10 @@ class Gblib(object):
             return True
 
     @staticmethod
-    def recv_bc(myip=None, timeout=1):
+    def recv_bc(myip='0.0.0.0', timeout=1):
         sock_lst = []
         device_lst = []
-        if myip is None:
-            for interface in netifaces.interfaces():
-                for link in netifaces.ifaddresses(interface).get(netifaces.AF_INET, ()):
-                    sock_lst.append(Gblib.send_bc(link['addr']))
-        else:
-            sock_lst.append(Gblib.send_bc(myip))
+        sock_lst.append(Gblib.send_bc(myip))
         sleep(timeout)
         for ip_addr, sock in sock_lst:
             while True:

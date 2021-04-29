@@ -20,7 +20,7 @@ config.read(args.upload_ini)
 firmware = configparser.ConfigParser(strict=False)
 firmware.read(os.path.join('fw', args.version_ini))
 
-myIp = config['defaults']['myIp'] if 'myIp' in config['defaults'] else None
+myIp = config['defaults']['myIp'] if 'myIp' in config['defaults'] else '0.0.0.0'
 
 gbl = Gblib()
 
