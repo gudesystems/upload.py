@@ -27,6 +27,11 @@ gbl = Gblib()
 # add cmd line arg to ip list
 if args.iprange is not None:
     config['hosts']['iprange'] = args.iprange
+else:
+    if len(config['hosts']) == 0:
+        print("EPD/PDU device IP address given.\n"
+              "Please try to enable 'gbl=search' or 'ip1=192.168.0.1' in your upload.ini,\n"
+              "and/or give an IP adress or subnet by --iprange parameter")
 
 for addrRange in config['hosts']:
     target = config['hosts'][addrRange]
