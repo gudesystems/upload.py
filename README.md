@@ -78,15 +78,27 @@ automatically deploy configuration and/or firmware updates to multiple **Gude Sy
 py D:/gude/upload.py/upload.py --onlineupdate --iprange 10.113.6.66
  
 trying 10.113.6.66...
-Expert Power Control 8041-1 (80xx) detected at 10.113.6.66 running Fimware Version '1.0.2'
+Expert Power Control 8041-1 (80xx) detected at 10.113.6.66 running Fimware Version '1.1.2'
 downloading http://files.gude.info/fw/gude/firmware-epc8031.json
-	expected FW 1.1.3 needsUpdate(True)
-uploading firmware-epc8031_v1.1.3.bin, please wait ... 
-upload complete, device reboots to extract firmware file, please wait...
+        expected FW 1.1.3 needsUpdate(True)
+uploading firmware-epc8031_v1.1.3.bin, please wait ...
+uploading 1172046 bytes...
+upload progress 2.36% 27624/1172046
+upload progress 7.07% 82920/1172046
+upload progress 11.79% 138216/1172046
+[...]
+upload progress 73.13% 857064/1172046
+upload progress 78.21% 916712/1172046
+upload progress 82.93% 972008/1172046
+upload progress 87.65% 1027304/1172046
+upload progress 92.37% 1082600/1172046
+upload progress 97.11% 1138152/1172046
+upload progress 100.00% 1172046/1172046
+upload complete, device is checking file consistency...
+Firmware update 1.1.2 -> 1.1.3, device reboots to extract firmware file, please wait...
 Rebooting...
 .
-.
-.
+[...]
 .
  10.113.6.66:80 up
 device with IP 10.113.6.66 has hostame EPC-8041 and FW Version 1.1.3
