@@ -2,6 +2,7 @@ import os
 import re
 import time
 import requests
+import threading
 from gude.httpDevice import HttpDevice
 
 
@@ -34,6 +35,11 @@ class DeployDev(HttpDevice):
                         cfgFilename = None
 
         return cfgFilename
+
+    def threadedUpload(self):
+        print(f"uploading {len(self.fw)} bytes...")
+        self.uploadFile(self.fw, self.CGI_UPLOAD_TYPE_FIRMWARE)
+        self.fw = None
 
     def updateFirmware(self, deviceData, cfg, fwdir='fw', forced=False, onlineUpdate=False):
         prodid = deviceData['prodid']
@@ -69,8 +75,24 @@ class DeployDev(HttpDevice):
             fw = self.getFileContent(localFilename, "rb")
             if fw is not None:
                 print(f"uploading {fwFilename}, please wait ... ")
-                self.uploadFile(fw, self.CGI_UPLOAD_TYPE_FIRMWARE)
-                print(f"upload complete, device reboots to extract firmware file, please wait...")
+                self.fw = fw
+                threading.Thread(target=self.threadedUpload, args=()).start()
+                time.sleep(1)
+                while self.fw is not None:
+                    uploadStatus = self.httpGetStatusJson(DeployDev.JSON_STATUS_UPLOAD)['fileupload']
+                    total = uploadStatus['total']
+                    progress = uploadStatus['progress']
+                    p = (100 / total) * progress
+                    print(f"upload progress {p:02.2f}% {uploadStatus['progress']}/{total}")
+                    time.sleep(2)
+                    if uploadStatus['checking']:
+                        print(f"upload complete, device is checking file consistency...")
+                        time.sleep(4)
+
+                uploadStatus = self.httpGetStatusJson(DeployDev.JSON_STATUS_UPLOAD)['fileupload']
+                fw = [uploadStatus['update']['from'], uploadStatus['update']['to']]
+                print(f"Firmware update {fw[0][1]}.{fw[0][2]}.{fw[0][3]} -> {fw[1][1]}.{fw[1][2]}.{fw[1][3]}, "
+                      f"device reboots to extract firmware file, please wait...")
                 self.reboot(waitreboot=True, maxWaitSecs=120)
 
     def uploadConfig(self, cfgFileName, configip):
@@ -89,5 +111,3 @@ class DeployDev(HttpDevice):
                 newSate = self.httpSwitchPort(int(port), int(state))['outputs'][int(port) - 1]['state']
                 print(f"cmd 'port {port} state set {state}' -> '{newSate}' (sleeping 1s)")
                 time.sleep(1)
-
-

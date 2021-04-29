@@ -21,6 +21,7 @@ class HttpDevice:
     JSON_STATUS_SENSOR_VALUES = 0x00004000  # Actual values of available sensors (temperature, etc.)
     JSON_STATUS_SENSOR_DESCR = 0x00010000  # Field description of the actual available sensors (temperature, etc.)
     JSON_STATUS_CLOCK = 0x00008000  # status clock
+    JSON_STATUS_UPLOAD = 0x00200000 # upload stattus
     JSON_STATUS_SENSOR_EXT = 0x00800000 # enable grouped sensors in SENSOR_VALUES / SENSOR_DESCR
 
     # config.json components flags
