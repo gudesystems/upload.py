@@ -42,7 +42,7 @@ automatically deploy configuration and/or firmware updates to multiple **Gude Sy
  
     
 # create config
-- you can download / edit / down-strip / extend device's live configuration by downloading config.txt at each device's maintenance page
+- you can download / edit / down-strip / extend a device's live configuration by downloading config.txt at each device's maintenance page
 - you can use CLI commands to create your desired config file
   - a complete list of all CLI commands can be found in every device's PDF manual
 
