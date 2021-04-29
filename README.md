@@ -11,18 +11,18 @@ automatically deploy configuration and/or firmware updates to multiple **Gude Sy
 
 - **which devices**
   - enable 'gbl=search' in upload.ini
-    - to run a 'search' Broadcast in your local network(s)
+    - to run a 'search' broadcast in your local network(s)
   - enable e.g. 'net1 = 192.168.1.0/24'
     - to probe a subnet
   - enable e.g. 'ip1 = 192.168.1.11' 
-    - to probe a single device unit (or multiple with ip2, ip3, etc...)
+    - to probe a single device unit (or multiple units with ip2, ip3, etc...)
   - use 'upload.py --iprange 192.168.1.11'
     - to probe a single device unit
   - or any combination of parameters mentioned above
 
 
 - **which firmware version**
-  - use 'upload.py --onlineupdate to use the most recent internet firmware files
+  - use 'upload.py --onlineupdate' to use the most recent internet firmware files
     - firmware binary files are automatically downloaded to fw/*.bin
   - to run offline updates
     - download firmware binary files to fw/*.bin
