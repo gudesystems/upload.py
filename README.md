@@ -70,6 +70,10 @@ automatically deploy configuration and/or firmware updates to multiple **Gude Sy
 - requests
 
 # example
+- which device(s): 10.113.6.66, given by --iprange
+- which firmware: most recent, given by --onlineupdate
+- which config: cli given by file config\config_00_19_32_00_e8_b6.txt
+
 ```
 py D:/gude/upload.py/upload.py --onlineupdate --iprange 10.113.6.66
  
