@@ -65,8 +65,6 @@ automatically deploy configuration and/or firmware updates to multiple **Gude Sy
   - giving username / password sets up HTTP Basic Authentication 
 
 # required non-standard python modules
-- crcmod
-- netifaces
 - requests
 
 # example
