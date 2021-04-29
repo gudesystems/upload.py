@@ -38,7 +38,7 @@ class DeployDev(HttpDevice):
 
     def threadedUpload(self):
         print(f"uploading {len(self.fw)} bytes...")
-        self.uploadFile(self.fw, self.CGI_UPLOAD_TYPE_FIRMWARE)
+        self.uploadFile(self.fw, self.CGI_UPLOAD_TYPE_FIRMWARE, timeout=300.0)
         self.fw = None
 
     def updateFirmware(self, deviceData, cfg, fwdir='fw', forced=False, onlineUpdate=False):
