@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+
 import configparser
 import argparse
 import os
@@ -5,7 +7,7 @@ import ipaddress
 from gude.deployDev import DeployDev
 from gude.gblib import Gblib
 
-parser = argparse.ArgumentParser(prog='sensor')
+parser = argparse.ArgumentParser()
 parser.add_argument('--configip', help='ip address to select config')
 parser.add_argument('-f', '--forcefw', help='upload fw even if already up to date', action="store_true")
 parser.add_argument('-u', '--upload_ini', help='upload.ini paramater set', default='upload.ini')

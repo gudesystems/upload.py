@@ -6,7 +6,7 @@ automatically deploy configuration and/or firmware updates to multiple **Gude Sy
 - You need to prepare three elements:
   - **which devices**
   - **which firmware version**
-  - **which configuration**
+  - **which configuration / ssl certificate**
 
 
 - **which devices**
@@ -32,13 +32,18 @@ automatically deploy configuration and/or firmware updates to multiple **Gude Sy
     - this will download all binary files to fw/*.bin, and sets fw/version.ini accordingly
 
 
-- **which configuration**
+- **which configuration / ssl certificate**
   - when the firmware is already up to date or updated, upload.py can also deploy device configuration
-  - if file exists, config/config_[MAC_ADD].txt is deployed to this device
-    - e.g. **config/config_00_19_32_00_00_01.txt**
-  - of otherwise, and if file exists, config/config_[IP].txt is deployed to this device
-    - e.g. **config/config_192_168_1_10.txt**
-  - of otherwise, and if file exists, **config/config.txt** is deployed to each device
+    and/or ssl certificates per device
+  - configuration
+    - if file exists, config/config_[MAC_ADD].txt is deployed to this device
+      - e.g. **config/config_00_19_32_00_00_01.txt**
+    - of otherwise, and if file exists, config/config_[IP].txt is deployed to this device
+      - e.g. **config/config_192_168_1_10.txt**
+    - of otherwise, and if file exists, **config/config.txt** is deployed to each device
+  - ssl certificate
+    - upload.py looks out for files ssl/cert_[MAC_ADD].pem, ssl/cert_[IP].pem or
+      cert.pem, as described above with configuration files
  
     
 # create config
@@ -75,37 +80,44 @@ automatically deploy configuration and/or firmware updates to multiple **Gude Sy
 ```
 py D:/gude/upload.py/upload.py --onlineupdate --iprange 10.113.6.66
  
+trying 1 devices
 trying 10.113.6.66...
-Expert Power Control 8041-1 (80xx) detected at 10.113.6.66 running Fimware Version '1.1.2'
+Expert Power Control 8041-1 (80xx, 00_19_32_00_e8_b6) at 10.113.6.66
+        running Fimware v1.1.2
 downloading http://files.gude.info/fw/gude/firmware-epc8031.json
-        expected FW 1.1.3 needsUpdate(True)
-uploading firmware-epc8031_v1.1.3.bin, please wait ...
+downloading http://files.gude.info/fw/gude/firmware-epc8031_v1.1.3.bin
+        updateing to Fimware v1.1.3
+uploading firmware-epc8031_v1.1.3.bin, please wait...
 uploading 1172046 bytes...
 upload progress 2.36% 27624/1172046
-upload progress 7.07% 82920/1172046
-upload progress 11.79% 138216/1172046
+upload progress 7.10% 83176/1172046
+upload progress 11.84% 138728/1172046
+upload progress 16.58% 194280/1172046
 [...]
-upload progress 73.13% 857064/1172046
-upload progress 78.21% 916712/1172046
-upload progress 82.93% 972008/1172046
-upload progress 87.65% 1027304/1172046
-upload progress 92.37% 1082600/1172046
-upload progress 97.11% 1138152/1172046
+upload progress 87.54% 1026024/1172046
+upload progress 92.26% 1081320/1172046
+upload progress 96.98% 1136616/1172046
 upload progress 100.00% 1172046/1172046
 upload complete, device is checking file consistency...
+upload complete
 Firmware update 1.1.2 -> 1.1.3, device reboots to extract firmware file, please wait...
+Rebooting...
+.
+[...]
+ 10.113.6.66:80 up
+uploading config/config_00_19_32_00_e8_b6.txt, please wait...
+upload complete, device reboots to apply config file, please wait...
 Rebooting...
 .
 [...]
 .
  10.113.6.66:80 up
-device with IP 10.113.6.66 has hostame EPC-8041 and FW Version 1.1.3
-
-uploading config\config_00_19_32_00_e8_b6.txt, please wait ... 
-upload complete, device reboots to apply config file, please wait...
+uploading ssl/cert_00_19_32_00_e8_b6.pem, please wait...
+upload complete, device reboots to apply cert file, please wait...
+Rebooting...
 Rebooting...
 .
-.
+[...]
 .
  10.113.6.66:80 up
 device with IP 10.113.6.66 has hostame EPC-8041 and FW Version 1.1.3
