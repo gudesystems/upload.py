@@ -29,58 +29,65 @@ if args.iprange is not None:
     config['hosts']['iprange'] = args.iprange
 else:
     if len(config['hosts']) == 0:
-        print("EPD/PDU device IP address given.\n"
-              "Please try to enable 'gbl=search' or 'ip1=192.168.0.1' in your upload.ini,\n"
-              "and/or give an IP adress or subnet by --iprange parameter")
+        print("no EPC/PDU device IP address(es) given.\n"
+              "\tPlease try to enable 'gbl=search' or 'ip1=192.168.0.1' in your upload.ini,\n"
+              "\tand/or give an IP adress or subnet by --iprange parameter\n")
+        exit(1)
 
+ipList = []
 for addrRange in config['hosts']:
     target = config['hosts'][addrRange]
     if target == "search":
-        ipList = []
-
-        print("Searching devices...")
+        print("Searching devices by GBL UDP broadcast...")
         device_lst = Gblib.recv_bc(myIp, float(config['defaults']['gblTimeout']))
         for dev in device_lst:
             ipList.append(Gblib.get_dev_info(dev)['ip'])
     else:
-        ipList = ipaddress.IPv4Network(target)
+        for ip in ipaddress.IPv4Network(target):
+            ipList.append(ip)
 
-    for ip in ipList:
-        print(ip)
-        if not gbl.check_mac(str(ip)):
-            print("cannot query dev by check_mac()")
-            exit(1)
-        else:
-            mac = '_'.join(f'{c:02x}' for c in gbl.dstMAC)
-            cfgFilename = DeployDev.getConfigFilename(mac, ip, args.configip)
+print(f"trying {len(ipList)} devices")
+for ip in ipList:
+    print(f"trying {ip}...")
+    if not gbl.check_mac(str(ip)):
+        print("cannot query dev by check_mac()")
+        exit(1)
 
-        dev = DeployDev(ip)
-        configKey = ip if ip in config else 'httpDefaults'
+    mac = '_'.join(f'{c:02x}' for c in gbl.dstMAC)
+    cfgFilename = DeployDev.getConfigFilename('config', 'config', 'txt', mac, ip, args.configip)
+    sslCertFilename = DeployDev.getConfigFilename('ssl', 'cert', 'pem', mac, ip, args.configip)
 
-        dev.setHttpPort(config[configKey]['port'], config[configKey]['ssl'] == '1')
-        dev.setBasicAuth(config[configKey]['auth'] == '1', config[configKey]['username'], config[configKey]['password'])
+    dev = DeployDev(ip)
+    configKey = ip if ip in config else 'httpDefaults'
 
-        dev.setHttpTimeout(float(config['defaults']['httpTimeout']))
-        dev.setHttpRetries(0)
+    dev.setHttpPort(config[configKey]['port'], config[configKey]['ssl'] == '1')
+    dev.setBasicAuth(config[configKey]['auth'] == '1', config[configKey]['username'], config[configKey]['password'])
 
-        try:
-            print(f"trying {ip}...")
-            deviceData = dev.httpGetStatusJson(DeployDev.JSON_STATUS_MISC)['misc']
-            print(f"{deviceData['product_name']} ({deviceData['prodid']}) detected at {ip} running Fimware Version '{deviceData['firm_v']}'")
+    dev.setHttpTimeout(float(config['defaults']['httpTimeout']))
+    dev.setHttpRetries(0)
 
-            # deploy Firmware
-            if deviceData['prodid'] in firmware:
-                dev.updateFirmware(deviceData, firmware, config['defaults']['fwdir'],
-                                   forced=args.forcefw, onlineUpdate=args.onlineupdate)
+    try:
+        deviceData = dev.httpGetStatusJson(DeployDev.JSON_STATUS_MISC)['misc']
+        print(f"{deviceData['product_name']} ({deviceData['prodid']}, {mac}) at {ip}\n\t"
+              f"running Fimware v{deviceData['firm_v']}")
 
-            # deploy Configuration
-            if cfgFilename is not None:
-                dev.uploadConfig(cfgFilename, args.configip)
+        # deploy Firmware
+        if deviceData['prodid'] in firmware:
+            dev.updateFirmware(deviceData, firmware, config['defaults']['fwdir'],
+                               forced=args.forcefw, onlineUpdate=args.onlineupdate)
 
-            # print FW Version and configured Hostname
-            ipv4 = dev.httpGetConfigJson(dev.JSON_CONFIG_IP)['ipv4']
-            misc = dev.httpGetStatusJson(DeployDev.JSON_STATUS_MISC)['misc']
-            print(f"device with IP {dev.host} has hostame {ipv4['hostname']} and FW Version {misc['firm_v']}")
+        # deploy Configuration
+        if cfgFilename is not None:
+            dev.uploadConfig(cfgFilename, args.configip)
 
-        except Exception as e:
-            print(f"skipped : {ip} {e}")
+        # deploy SSL certificate
+        if sslCertFilename is not None:
+            dev.uploadSslCertifiate(sslCertFilename)
+
+        # print FW Version and configured Hostname
+        ipv4 = dev.httpGetConfigJson(dev.JSON_CONFIG_IP)['ipv4']
+        misc = dev.httpGetStatusJson(DeployDev.JSON_STATUS_MISC)['misc']
+        print(f"device with IP {dev.host} has hostame {ipv4['hostname']} and FW Version {misc['firm_v']}")
+
+    except Exception as e:
+        print(f"skipped : {ip} {e}")
