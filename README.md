@@ -1,5 +1,7 @@
 # upload.py
-automatically deploy configuration and/or firmware updates to multiple **Gude Systems GmbH PDU devices**
+- automatically deploy firmware updates, configuration and/or ssl certificates to multiple **Gude Systems GmbH PDU devices**
+- Firmware udpates can be obtained automatically by using --onlineupdates
+- device configuration and ssl certificates, needs to prepared as pre-requirement
 
 
 # QuickStart
