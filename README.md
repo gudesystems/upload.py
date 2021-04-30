@@ -46,6 +46,7 @@
   - ssl certificate
     - upload.py looks out for files ssl/cert_[MAC_ADD].pem, ssl/cert_[IP].pem or
       cert.pem, as described above with configuration files
+      - e.g. **ssl/cert_00_19_32_00_00_01.txt** or **ssl/cert_192_168_1_10.txt** 
  
     
 # create config
