@@ -10,7 +10,7 @@ args = parser.parse_args()
 firmware = configparser.ConfigParser(strict=False)
 firmware.read(args.version_ini)
 
-basepath = 'http://files.gude.info/fw/gude'
+basepath = 'https://files.gude-systems.com/fw/gude'
 latest = {}
 
 for devClass in firmware.sections():
