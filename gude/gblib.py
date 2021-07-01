@@ -145,7 +145,7 @@ class Gblib(object):
         bldr_ver = '.'.join(str(x) for x in info['bootloader']['version'])
         return (f"{info['mac']} - {info['devname']:32} - v{fw_ver} ({bldr_ver}{bl_str}), hostname {info['hostname']} - {info['ip']}")
 
-    def check_mac(self, ip_addr, clear_cache = False):
+    def check_mac(self, ip_addr, clear_cache = True):
         if clear_cache:
             self.dstMAC = bytes(0)
 
