@@ -45,8 +45,12 @@ for addrRange in config['hosts']:
         for dev in device_lst:
             ipList.append(Gblib.get_dev_info(dev)['ip'])
     else:
+        numHosts = 0
         for ip in ipaddress.ip_network(target).hosts():
             ipList.append(ip)
+            numHosts += 1
+        if numHosts == 0:
+            ipList.append(target)
 
 print(f"trying {len(ipList)} devices")
 for ip in ipList:
