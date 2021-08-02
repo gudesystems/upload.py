@@ -125,4 +125,3 @@ Rebooting...
  10.113.6.66:80 up
 device with IP 10.113.6.66 has hostame EPC-8041 and FW Version 1.1.3
 ```
-
