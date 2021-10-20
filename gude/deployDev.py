@@ -101,7 +101,7 @@ class DeployDev(HttpDevice):
             uploadStatus = self.httpGetStatusJson(DeployDev.JSON_STATUS_UPLOAD)['fileupload']
             fw = [uploadStatus['update']['from'], uploadStatus['update']['to']]
             print(f"Firmware update {fw[0][1]}.{fw[0][2]}.{fw[0][3]} -> {fw[1][1]}.{fw[1][2]}.{fw[1][3]}, "
-                  f"device reboots to extract firmware file, please wait...")
+                  f"device is rebooting to extract firmware file, please wait...")
             self.reboot(waitreboot=True, maxWaitSecs=120)
 
     def uploadConfig(self, cfgFileName, configip):
@@ -110,7 +110,7 @@ class DeployDev(HttpDevice):
             return
         print(f"uploading {cfgFileName}, please wait...")
         self.uploadFile(cfg, self.CGI_UPLOAD_TYPE_CONFIG)
-        print(f"upload complete, device reboots to apply config file, please wait...")
+        print(f"upload complete, device is rebooting to apply config file, please wait...")
         self.reboot(waitreboot=False)
         if configip is not None:
             self.host = configip
@@ -128,5 +128,5 @@ class DeployDev(HttpDevice):
             return
         print(f"uploading {sslCertFileName}, please wait...")
         self.uploadFile(cert, self.CGI_UPLOAD_TYPE_SSL_CERT)
-        print(f"upload complete, device reboots to apply cert file, please wait...")
+        print(f"upload complete, device is rebooting to apply cert file, please wait...")
         self.reboot(waitreboot=True, maxWaitSecs=30)
