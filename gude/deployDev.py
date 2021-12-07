@@ -54,6 +54,11 @@ class DeployDev(HttpDevice):
         else:
             latest_version = cfg[prodid]['version']
 
+        needsUpdate = forced or (latest_version != devVersion)
+        if not needsUpdate:
+            print(f"\texpected Fimware v{latest_version} : no update needed")
+            return
+
         fwFilename = cfg[prodid]['filename'].replace('{version}', latest_version)
         localFilename = os.path.join(os.path.join(fwdir, fwFilename))
 
@@ -69,11 +74,6 @@ class DeployDev(HttpDevice):
             else:
                 raise ValueError(f"Firmare file not found : {localFilename}")
                 fwFilename = None
-
-        needsUpdate = forced or (latest_version != devVersion)
-        if not needsUpdate:
-            print(f"\texpected Fimware v{latest_version} : no update needed")
-            return
 
         print(f"\tupdateing to Fimware v{latest_version}")
 
