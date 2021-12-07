@@ -56,8 +56,8 @@ print(f"trying {len(ipList)} devices")
 for ip in ipList:
     print(f"trying {ip}...")
     if not gbl.check_mac(str(ip)):
-        print("cannot query dev by check_mac()")
-        exit(1)
+        print("GBL Timeout (UDP port 50123)")
+        continue
 
     mac = '_'.join(f'{c:02x}' for c in gbl.dstMAC)
     cfgFilename = DeployDev.getConfigFilename('config', 'config', 'txt', mac, ip, args.configip)
