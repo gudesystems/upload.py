@@ -77,10 +77,13 @@ for ip in ipList:
         print(f"{deviceData['product_name']} ({deviceData['prodid']}, {mac}) at {ip}\n\t"
               f"running Fimware v{deviceData['firm_v']}")
 
-        # deploy Firmware
-        if deviceData['prodid'] in firmware:
-            dev.updateFirmware(deviceData, firmware, config['defaults']['fwdir'],
-                               forced=args.forcefw, onlineUpdate=args.onlineupdate)
+        try:
+            # deploy Firmware
+            if deviceData['prodid'] in firmware:
+                dev.updateFirmware(deviceData, firmware, config['defaults']['fwdir'],
+                                   forced=args.forcefw, onlineUpdate=args.onlineupdate)
+        except ValueError as ve:
+            print(f"skipped firmware update: {ip} {ve}")
 
         # deploy Configuration
         if cfgFilename is not None:
