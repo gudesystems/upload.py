@@ -4,6 +4,8 @@ import configparser
 import argparse
 import os
 import ipaddress
+import socket
+
 from gude.deployDev import DeployDev
 from gude.gblib import Gblib
 
@@ -46,7 +48,21 @@ for addrRange in config['hosts']:
             ipList.append(Gblib.get_dev_info(dev)['ip'])
     else:
         numHosts = 0
-        for ip in ipaddress.ip_network(target).hosts():
+        
+        ip_addresses = []
+        try:
+            ip_addresses = ipaddress.ip_network(target).hosts()
+        except ValueError:
+            # from this point on target can only be a single device (no network)
+            if '/' in target:
+                raise ValueError(f"{target} does not appear to be an IPv4 or IPv6 network")
+            else:
+                print(f"Could not detect IP: {target}, trying to resolve potential hostname...")
+                new_target = socket.gethostbyname(target)
+                print(f"Resolved: {target} as: {new_target}, trying again...")
+                ip_addresses = ipaddress.ip_network(new_target).hosts()
+        
+        for ip in ip_addresses:
             ipList.append(ip)
             numHosts += 1
         if numHosts == 0:
