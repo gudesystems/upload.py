@@ -1,13 +1,56 @@
+# from os import get_terminal_size
+from shutil import get_terminal_size
+from sys import stdout
+
 import socket
 from time import sleep
 import struct
 
 
+def print_progress_bar(iteration, total, decimals=1, length=None, fill='█', clear='-', unit='', actual=None,
+                       actual_total=None):
+    if stdout.isatty():
+        if length is None:
+            length = get_terminal_size().columns - len(f"100.0%   {total}/{total} " + unit)
+        percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
+        if iteration == total:
+            filled_length = length
+        else:
+            filled_length = int(length * (iteration % total) // total)
+        bar = fill * filled_length + clear * (length - filled_length)
+        if not actual:
+            actual = iteration
+        if not actual_total:
+            actual_total = total
+        if length < 0:
+            print(f'\r{percent.split(".")[0]:>3}%', end='')
+        else:
+            print(f'\r{percent:>5}% {bar} {actual}/{actual_total} ' + unit, end='')
+        if iteration == total:
+            print()
+
+
 class Gblib(object):
-    GBL_NETCONF     = b'\x01'  # GBL CMD   1 : query / search device
+    GBL_NETCONF = b'\x01'  # GBL CMD   1 : query / search device
     GBL_FABSETTINGS = b'\x05'  # GBL CMD   5 : delete all user config
-    GBL_GOFIRM      = b'\x0f'  # GBL CMD  15 : start firmware from bootloader
-    GBL_GOBLDR      = b'\x10'  # GBL CMD  16 : start bootloader from firmware / restart bootloader
+    GBL_READEEP = b'\x0d'  # GBL CMD  13 : binary read eprom page
+    GBL_WRITEEEP = b'\x0e'  # GBL CMD  14 : binary write eprom page
+    GBL_GOFIRM = b'\x0f'  # GBL CMD  15 : start firmware from bootloader
+    GBL_GOBLDR = b'\x10'  # GBL CMD  16 : start bootloader from firmware / restart bootloader
+    GBL_FWINFO = b'\x11'  # GBL CMD  17 : (CF-legacy) get device info
+    GBL_READENT = b'\x15'  # GBL CMD  21 : read eprom entity
+    GBL_WRITENT = b'\x16'  # GBL CMD  22 : write eprom entity
+    GBL_DELENT = b'\x18'  # GBL CMD  24 : delete eprom entity
+    GBL_RDPART = b'\x1e'  # GBL CMD  30 : binary read flash partiton page
+    GBL_WRPART = b'\x1f'  # GBL CMD  31 : binary write flash partiton page
+    GBL_WRPARTTBL = b'\x20'  # GBL CMD  32 : write ext flash partition table (stage-X)
+    GBL_WRSTG0IO = b'\x21'  # GBL CMD  33 : write stage IO defs to spi flash (stage-X)
+    GBL_DELMAINT = b'\x22'  # GBL CMD  34 : delete maintenance flag (stage-X)
+    GBL_GETCHIPID = b'\x23'  # GBL CMD  3% : get chip id
+
+    GBL_DEL_MAGIC = b'\x87\x86\x85\x85\x86\xAD\x9E\x91\x9B\x90\x92\xBB\x9A\x89\x96\x93'
+
+    DEFAULT_TIMEOUT = 1.0
 
     def __init__(self):
         self.dstMAC = bytes(0)
@@ -64,7 +107,7 @@ class Gblib(object):
             'data': udpdata[11:-1],
             'crc': udpdata[-1],
             'unpacked': None,
-            'udpdata' : udpdata
+            'udpdata': udpdata
         }
 
         if Gblib.gbl_checksum(udpdata[:-1]) != gbl_reply['crc']:
@@ -123,17 +166,17 @@ class Gblib(object):
             hostname = dev[21].decode().rstrip('\0')  # strip zeros at end!
 
         return {
-            'devname' : Gblib.get_device_name(dev),
-            'mac' : ':'.join(f'{c:02x}' for c in dev[1]),
-            'ip'  : socket.inet_ntoa(dev[8]),
-            'hostname' : hostname,
-            'bootloader' : {
-                'active' : True if dev[7] else False,
+            'devname': Gblib.get_device_name(dev),
+            'mac': ':'.join(f'{c:02x}' for c in dev[1]),
+            'ip': socket.inet_ntoa(dev[8]),
+            'hostname': hostname,
+            'bootloader': {
+                'active': True if dev[7] else False,
                 'version': [dev[3], dev[4]]
             },
-            'firmware' : {
-                'active' : True if not dev[7] else False,
-                'version' : [dev[5], dev[6]]
+            'firmware': {
+                'active': True if not dev[7] else False,
+                'version': [dev[5], dev[6]]
             }
         }
 
@@ -145,7 +188,7 @@ class Gblib(object):
         bldr_ver = '.'.join(str(x) for x in info['bootloader']['version'])
         return (f"{info['mac']} - {info['devname']:32} - v{fw_ver} ({bldr_ver}{bl_str}), hostname {info['hostname']} - {info['ip']}")
 
-    def check_mac(self, ip_addr, clear_cache = True):
+    def check_mac(self, ip_addr, clear_cache=True):
         if clear_cache:
             self.dstMAC = bytes(0)
 
