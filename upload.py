@@ -68,11 +68,11 @@ def add_iprange_to_config(_iprange: str, _config: ConfigParser):
             raise KeyError("Missing required args, could not determine device!")
 
 
-def generate_ip_list(_hosts: list, _gbl_timeout: int) -> list:
+def generate_ip_list(_hosts: list, _gbl_timeout: float) -> list:
     """
     Function that adds hosts from args to hosts in _config (parsed hosts from upload.ini)
     :param list _hosts: list of ips, ip-sub-nets OR hostnames
-    :param int _gbl_timeout: timeout in seconds to wait after sending broadcast
+    :param float _gbl_timeout: timeout in seconds to wait after sending broadcast
 
     :returns:
     - _ip_list - parsed args
@@ -85,7 +85,7 @@ def generate_ip_list(_hosts: list, _gbl_timeout: int) -> list:
         target = _hosts[addrRange]
         if target == "search":
             log.info("Searching devices by GBL UDP broadcast...")
-            device_lst = Gblib.recv_bc(myIp, float(_gbl_timeout))
+            device_lst = Gblib.recv_bc(myIp, _gbl_timeout)
             for dev in device_lst:
                 _ip_list.append(Gblib.get_dev_info(dev)['ip'])
         else:
@@ -192,7 +192,7 @@ args, config, firmware, myIp = parse_args()
 add_iprange_to_config(args.iprange, config)
 
 # get all target ips
-ip_list = generate_ip_list(config['hosts'], int(config['defaults']['gblTimeout']))
+ip_list = generate_ip_list(config['hosts'], float(config['defaults']['gblTimeout']))
 
 # iterate devices, get each dev info, update fw, config and certificate
 iterate_list(ip_list, firmware, config, args)
