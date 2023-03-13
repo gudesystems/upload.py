@@ -94,8 +94,10 @@ class DeployDev(HttpDevice):
                 if r.status_code == 200:
                     with open(local_filename, 'wb') as fwfile:
                         fwfile.write(r.content)
+                else:
+                    raise ValueError(f"Firmware file not found (online): {local_filename}")
             else:
-                raise ValueError(f"Firmware file not found : {local_filename}")
+                raise ValueError(f"Firmware file not found (offline): {local_filename}")
 
         log.info(f"updating to Firmware v{latest_version}")
 
