@@ -34,7 +34,7 @@ def parse_args() -> Tuple[Namespace, ConfigParser, ConfigParser, str]:
     parser.add_argument('-u', '--upload_ini', help='upload.ini paramater set', default='upload.ini')
     parser.add_argument('-v', '--version_ini', help='fw version defs', default='version.ini')
     parser.add_argument('--onlineupdate', help='use online update files', action="store_true", default=False)
-    parser.add_argument('--iprange', help='range of ip address to manage')
+    parser.add_argument('--iprange', nargs = "+", help='range of ip address to manage')
     _args = parser.parse_args()
 
     log.debug(f"Reading {_args.upload_ini} ...")
@@ -58,8 +58,9 @@ def add_iprange_to_config(_iprange: str, _config: ConfigParser):
     """
     # add cmd line arg to ip list
     if _iprange is not None:
-        log.debug(f"Adding iprange: {_iprange}")
-        _config['hosts']['iprange'] = _iprange
+        for i, ip in enumerate(_iprange):
+            log.debug(f"Adding iprange: {ip}")
+            _config['hosts'][f'iprange_{i}'] = ip
     else:
         if len(_config['hosts']) == 0:
             log.error("no EPC/PDU device IP address(es) given.\n"
