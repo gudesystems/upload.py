@@ -27,7 +27,7 @@ There are two options to set individual commands either via **Command Line Param
       - to probe a subnet
     - enable e.g. `ip1 = 192.168.1.11`
       - to probe a single device unit (or multiple units with `ip2`, `ip3`, etc...)
-    - use `--iprange 192.168.1.11`
+    - use `--iprange 192.168.1.11` or `--iprange host/DNS` 
       - to probe a single device unit
   - any combination of parameters mentioned above can be combined
 - Online update
