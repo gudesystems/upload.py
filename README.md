@@ -29,6 +29,8 @@ There are two options to set individual commands either via **Command Line Param
       - to probe a single device unit (or multiple units with `ip2`, `ip3`, etc...)
     - use `--iprange 192.168.1.11` or `--iprange host/DNS` 
       - to probe a single device unit
+    - use `--iprange 192.168.1.11 192.168.1.12` 
+      - to probe multiple device unit
   - any combination of parameters mentioned above can be combined
 - Online update
   - use `--onlineupdate` to use the most recent internet firmware files
