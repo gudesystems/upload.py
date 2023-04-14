@@ -74,10 +74,15 @@ class DeployDev(HttpDevice):
             latest_version = cfg[prodid]['version']
 
         # R2 check requires appendix
-        if 'R2' in prodid and ("R2" not in latest_version and "r2" not in latest_version):
-            latest_version += '-R2'
+        # if 'R2' in prodid and ("R2" not in latest_version and "r2" not in latest_version):
+        #     latest_version += '-R2'
+        # WORK IN PROGRESS (further testing required)
+        needs_update = forced or (
+            (latest_version + '-R2' != dev_version)
+            if 'R2' in prodid and 'BUILD' not in dev_version else
+            (latest_version != dev_version)
+        )
 
-        needs_update = forced or (latest_version != dev_version)
         if not needs_update:
             log.warning(f"\texpected Fimware v{latest_version} : no update needed")
             return
