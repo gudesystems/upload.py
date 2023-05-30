@@ -117,6 +117,8 @@ class DeployDev(HttpDevice):
             self.fw = fw
 
             threading.Thread(target=self.threaded_upload, args=()).start()
+            # increase timeout for https on fw-verions older than 23.02.2023
+            self.set_http_timeout(5)
             time.sleep(1)
             while self.fw is not None:
                 upload_status = self.http_get_status_json(DeployDev.JSON_STATUS_UPLOAD)['fileupload']
