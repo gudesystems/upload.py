@@ -74,15 +74,25 @@ class DeployDev(HttpDevice):
             latest_version = cfg[prodid]['version']
 
         # R2 check requires appendix
-        if 'R2' in prodid and ("R2" not in latest_version and "r2" not in latest_version):
-            latest_version += '-R2'
+        # TODO: Replacement correct?
+        # if 'R2' in prodid and ("R2" not in latest_version and "r2" not in latest_version):
+        #    latest_version += '-R2'
 
-        needs_update = forced or (latest_version != dev_version)
+        # TODO: CHECK THIS AND INCLUDE IF WORKING
+        needs_update = forced or (
+            (latest_version + '-R2' != dev_version)
+            if 'R2' in prodid and 'BUILD' not in dev_version else
+            (latest_version != dev_version)
+        )
+
+        # needs_update = forced or (latest_version != dev_version)
         if not needs_update:
             log.warning(f"\texpected Fimware v{latest_version} : no update needed")
             return
 
         fw_filename = cfg[prodid]['filename'].replace('{version}', latest_version)
+        if cfg.has_option(prodid, 'path'):
+            fw_dir = cfg[prodid]['path']
         local_filename = os.path.join(os.path.join(fw_dir, fw_filename))
 
         if not os.path.isfile(local_filename):

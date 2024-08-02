@@ -92,8 +92,8 @@ class HttpDevice(DeviceValues):
                 start = time.time()
                 if self.httpAutoAddAjaxTimestamp:
                     cgi_get_params["_"] = int(time.time())
-                r = requests.get(url, params=cgi_get_params, verify=False, timeout=self.httpTimeout, auth=auth,
-                                 headers={'Connection': 'close'})
+                # TODO: What is {'Connection': 'close'} for ? DOES NOT WORK WITH PORT FORWARDING
+                r = requests.get(url, params=cgi_get_params, verify=False, timeout=self.httpTimeout, auth=auth, headers={'Connection': 'close'})
                 stop = time.time()
             except requests.exceptions.Timeout:
                 log.info(f"Timeout {url} {cgi_get_params} {retries}")

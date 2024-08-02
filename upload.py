@@ -3,12 +3,16 @@
 from configparser import ConfigParser
 from argparse import ArgumentParser, Namespace
 import os
+#import io
 import ipaddress
-import socket
+from socket import gaierror
+from requests.exceptions import ConnectionError
 from typing import Tuple
 
 from gude.deployDev import DeployDev
 from gude.gblib import Gblib
+
+from gude import file_search
 
 import logging
 logging.basicConfig(format='%(asctime)s %(name)-18s %(levelname)-8s %(message)s')
@@ -29,25 +33,74 @@ def parse_args() -> Tuple[Namespace, ConfigParser, ConfigParser, str]:
     """
     log.debug("Parsing args ...")
     parser = ArgumentParser()
-    parser.add_argument('--configip', help='ip address to select config')
+    parser.add_argument('-c', '--configip', help='ip address to select config')
     parser.add_argument('-f', '--forcefw', help='upload fw even if already up to date', action="store_true")
     parser.add_argument('-u', '--upload_ini', help='upload.ini paramater set', default='upload.ini')
     parser.add_argument('-v', '--version_ini', help='fw version defs', default='version.ini')
-    parser.add_argument('--onlineupdate', help='use online update files', action="store_true", default=False)
-    parser.add_argument('--iprange', nargs = "+", help='range of ip address to manage')
+    parser.add_argument('-o', '--onlineupdate', help='use online update files', action="store_true", default=False)
+    parser.add_argument('-i', '--iprange', nargs="+",  help='range of ip address to manage')
+    parser.add_argument('-s', '--search_folder', help='folder to search for binary')
+    parser.add_argument('-r', '--repl_prod_id', help='product ids to replace', default={'2110': '2111', '8221': '822x', '8226': '822x'})
     _args = parser.parse_args()
 
     log.debug(f"Reading {_args.upload_ini} ...")
     _config = ConfigParser(strict=False)
     _config.read(_args.upload_ini)
+
+    set_default(_config)
+    set_http_defaults(_config)
+
     log.debug(f"Reading {os.path.join(_config['defaults']['fwdir'], _args.version_ini)} ...")
     _firmware = ConfigParser(strict=False)
-    _firmware.read(os.path.join(_config['defaults']['fwdir'], _args.version_ini))
-
+    if _args.search_folder is not None and os.path.isdir(_args.search_folder):
+        bin_infos = file_search.rekursive_search(_args.search_folder)
+        unique_bin_infos = file_search.get_unique_devices(bin_infos)
+        _firmware = file_search.get_config(unique_bin_infos, config=_firmware)
+        # buf = io.StringIO()
+        # version_ini.write(buf)
+        # _firmware.read_file(buf)
+    else:
+        _firmware.read(os.path.join(_config['defaults']['fwdir'], _args.version_ini))
     log.debug("Getting my IP ...")
     _my_ip = _config['defaults']['myIp'] if 'myIp' in _config['defaults'] else '0.0.0.0'
 
     return _args, _config, _firmware, _my_ip
+
+
+def set_default(_config, section='defaults'):
+    """
+    Function to set defaults.
+    :param _config ConfigParser: config parser to be edited
+    :param str section: Relevant section
+    """
+    if not _config.has_section(section):
+        _config[section] = {}
+    if not _config.has_option(section, 'httpTimeout'):
+        _config[section]['httpTimeout'] = '3.0'
+    if not _config.has_option(section, 'gblTimeout'):
+        _config[section]['gblTimeout'] = '1.0'
+    if not _config.has_option(section, 'fwdir'):
+        _config[section]['fwdir'] = 'fw'
+
+
+def set_http_defaults(_config, section='httpDefaults'):
+    """
+    Function to set httpDefaults.
+    :param _config ConfigParser: config parser to be edited
+    :param str section: Relevant section
+    """
+    if not _config.has_section(section):
+        _config[section] = {}
+    if not _config.has_option(section, 'port'):
+        _config[section]['port'] = '80'
+    if not _config.has_option(section, 'ssl'):
+        _config[section]['ssl'] = '0'
+    if not _config.has_option(section, 'auth'):
+        _config[section]['auth'] = '0'
+    if not _config.has_option(section, 'username'):
+        _config[section]['username'] = ''
+    if not _config.has_option(section, 'password'):
+        _config[section]['password'] = ''
 
 
 def add_iprange_to_config(_iprange: str, _config: ConfigParser):
@@ -60,6 +113,11 @@ def add_iprange_to_config(_iprange: str, _config: ConfigParser):
     if _iprange is not None:
         for i, ip in enumerate(_iprange):
             log.debug(f"Adding iprange: {ip}")
+            if ':' in ip and '/' not in ip:
+                if (']' in ip and ':' in ip.rpartition(']')[2]) or ']' not in ip:
+                    _config[ip] = {}
+                    _config[ip]['port'] = ip.rpartition(':')[2]
+
             _config['hosts'][f'iprange_{i}'] = ip
     else:
         if len(_config['hosts']) == 0:
@@ -93,17 +151,26 @@ def generate_ip_list(_hosts: list, _gbl_timeout: float) -> list:
             num_hosts = 0
 
             try:
+                # TODO: Consider not using 'ipaddress' pkg?
                 ip_addresses = ipaddress.ip_network(target).hosts()
             except ValueError:
                 # from this point on target can only be a single device (no network)
                 if '/' in target:
-                    raise ValueError(f"{target} does not appear to be an IPv4 or IPv6 network")
+                    raise ValueError(f"{target} detected an IPv4 or IPv6 network, but can not be handled as it")
                 else:
-                    log.warning(f"Could not detect IP: {target}, trying to resolve potential hostname...")
+                    log.warning(f"{target} could not be parsed as nativ IPAddress or IP-Network, "
+                                f"trying to handle without parsing...")
+                    '''
                     new_target = socket.gethostbyname(target)
                     log.info(f"Resolved: {target} as: {new_target}, trying again...")
                     ip_addresses = ipaddress.ip_network(new_target).hosts()
+                    '''
+                    # TODO: This requires an additional CHECK!
+                    # TODO: Keep in mind, that this only adds a str to a list containing also 'IPv4Address' objects!
+                    # TODO: Give option to enter port in arguments (how to handle port?)
+                    ip_addresses = [target]
 
+            # THIS IS VERY HACKY (better to resolve all ips, but mapping to device dependant config will be complex)
             for ip in ip_addresses:
                 _ip_list.append(ip)
                 num_hosts += 1
@@ -123,25 +190,24 @@ def iterate_list(_ip_list: list, _firmware: ConfigParser, _config: ConfigParser,
     :param ConfigParser _config: containing http config
     :param Namespace _args: additional options
     """
+
+    # TODO: Is GBL in this context necessary?
     gbl = Gblib()
 
     log.debug(f"trying {len(_ip_list)} devices")
     for ip in _ip_list:
-        log.info(f"trying {ip}...")
-        # update gbl info (dstMAC, bootl_mode, allow_go_boot, dev_info)
-        if not gbl.check_mac(str(ip)):
-            log.warning("GBL Timeout (UDP port 50123)")
-            continue
-        # extract mac
-        mac = '_'.join(f'{c:02x}' for c in gbl.dstMAC)
-        log.debug(f"Getting config filename ...")
-        cfg_filename = DeployDev.get_config_filename('config', 'config', 'txt', mac, ip, _args.configip)
-        log.debug(f"Getting ssl-cert filename ...")
-        ssl_cert_filename = DeployDev.get_config_filename('ssl', 'cert', 'pem', mac, ip, _args.configip)
-
         log.debug("Initializing DeployDev")
-        dev = DeployDev(ip)
+        # TODO: ip can be str or 'IPv4Address' or 'IPv6Address'!
+        if isinstance(ip, str) and ip.count(':') == 1:
+            dev_ip = ip.split(':')[0]
+        else:
+            dev_ip = ip
+        dev = DeployDev(dev_ip)
+
+        # this ensures mapping of device dependant config
         config_key = ip if ip in _config else 'httpDefaults'
+
+        set_http_defaults(_config, config_key)
 
         # config_key corresponds to the matching http configuration that can be found in upload.ini
         log.debug(f"Setting up DeployDev with config-key: {config_key}")
@@ -152,38 +218,77 @@ def iterate_list(_ip_list: list, _firmware: ConfigParser, _config: ConfigParser,
         dev.set_http_timeout(float(_config['defaults']['httpTimeout']))
         dev.set_http_retries(0)
 
+        gbl_error = False
+        try:
+            # This hase been moved from top of function
+            log.info(f"trying {ip}... (via GBL)")
+            # update gbl info (dstMAC, bootl_mode, allow_go_boot, dev_info)
+            if not gbl.check_mac(str(ip)):
+                log.warning("GBL Timeout (UDP port 50123)")
+                # continue
+                gbl_error = True
+            # extract mac (bytes longer than 255 result in two hex values so b'\x192' results in 1*16+9 and 2*16+0)
+            # this dec values need to be converted back to hex ('x') as string with the length 2 ('02')
+            mac = '_'.join(f'{c:02x}' for c in gbl.dstMAC)
+        except gaierror:
+            gbl_error = True
+            # TODO: Resolve hostname beforehand?
+            log.warning("Could not resolve address")
+        if gbl_error:
+            log.info(f"trying {ip}... (via HTTP(s) )")
+            try:
+                mac = dev.http_get_status_json(DeployDev.JSON_STATUS_ETHERNET)['ethernet']['mac'].replace(':', '_')
+            except TimeoutError:
+                log.error(f"Could not reach device {ip}")
+                raise TimeoutError
+
+        log.debug(f"Getting config filename ...")
+        cfg_filename = DeployDev.get_config_filename('config', 'config', 'txt', mac, ip, _args.configip)
+        log.debug(f"Getting ssl-cert filename ...")
+        ssl_cert_filename = DeployDev.get_config_filename('ssl', 'cert', 'pem', mac, ip, _args.configip)
+
+        # this may fail due to https
+        # TODO: Rework?
         try:
             device_data = dev.http_get_status_json(DeployDev.JSON_STATUS_MISC)['misc']
+        except ConnectionError as ce:
+            log.warning(f"Could not reach device on defined port/protocol (http OR https) on {ip} {ce}")
 
-            log.info(f"{device_data['product_name']} ({device_data['prodid']}, {mac}) at {ip}\n"+(52*" ")
-                     + f"running Firmware v{device_data['firm_v']}")
+        actual_prod_id = device_data['prodid']
+        if actual_prod_id in _args.repl_prod_id:
+            device_data['prodid'] = _args.repl_prod_id[actual_prod_id]
 
-            try:
-                # deploy Firmware
-                if device_data['prodid'] in _firmware:
-                    log.debug(f"Found {device_data['prodid']} in firmware list, starting update ...")
-                    dev.update_firmware(device_data, _firmware, _config['defaults']['fwdir'],
-                                        forced=_args.forcefw, online_update=_args.onlineupdate)
-            except ValueError as ve:
-                log.warning(f"skipped firmware update: {ip} {ve}")
+        log.info(f"{device_data['product_name']} ({actual_prod_id} [{device_data['prodid']}], {mac}) at {ip}\n"+(52*" ")
+                 + f"running Firmware v{device_data['firm_v']}")
 
-            # deploy Configuration
-            if cfg_filename is not None:
-                log.debug(f"Uploading {cfg_filename} ...")
-                dev.upload_config(cfg_filename, _args.configip)
+        try:
+            # deploy Firmware
+            if device_data['prodid'] in _firmware:
+                log.debug(f"Found {device_data['prodid']} in firmware list, starting update ...")
+                dev.update_firmware(device_data, _firmware, _config['defaults']['fwdir'],
+                                    forced=_args.forcefw, online_update=_args.onlineupdate)
+            else:
+                log.error(f"Did not found {actual_prod_id} [{device_data['prodid']}] in firmware list!")
+        except ValueError as ve:
+            log.warning(f"skipped firmware update: {ip} {ve}")
 
-            # deploy SSL certificate
-            if ssl_cert_filename is not None:
-                log.debug(f"Uploading {ssl_cert_filename} ...")
-                dev.upload_ssl_certificate(ssl_cert_filename)
+        # deploy Configuration
+        if cfg_filename is not None:
+            log.debug(f"Uploading {cfg_filename} ...")
+            dev.upload_config(cfg_filename, _args.configip)
 
-            # print FW Version and configured Hostname
-            ipv4 = dev.http_get_config_json(dev.JSON_CONFIG_IP)['ipv4']
-            misc = dev.http_get_status_json(DeployDev.JSON_STATUS_MISC)['misc']
-            log.info(f"device with IP {dev.host} has hostname {ipv4['hostname']} and FW Version {misc['firm_v']}")
+        # deploy SSL certificate
+        if ssl_cert_filename is not None:
+            log.debug(f"Uploading {ssl_cert_filename} ...")
+            dev.upload_ssl_certificate(ssl_cert_filename)
 
-        except Exception as e:
-            log.warning(f"skipped : {ip} {e}")
+        # print FW Version and configured Hostname
+        ipv4 = dev.http_get_config_json(dev.JSON_CONFIG_IP)['ipv4']
+        misc = dev.http_get_status_json(DeployDev.JSON_STATUS_MISC)['misc']
+        log.info(f"device with IP {dev.host} has hostname {ipv4['hostname']} and FW Version {misc['firm_v']}")
+
+        # except Exception as e:
+        #     log.warning(f"skipped : {ip} {e}")
 
 
 # get all args
