@@ -258,6 +258,9 @@ def iterate_list(_ip_list: list, _firmware: ConfigParser, _config: ConfigParser,
             except TimeoutError:
                 log.error(f"Could not reach device {ip}")
                 continue
+            except ValueError as ve:
+                log.error(f"Could not reach device {ip} {ve}")
+                continue
             except ConnectionError as ce:
                 log.error(f"Could not reach device on defined port/protocol (http OR https) on {ip} {ce}")
                 continue
