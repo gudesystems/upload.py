@@ -14,8 +14,8 @@ log.setLevel(logging.getLevelName('INFO'))
 
 
 class DeployDev(HttpDevice):
-    def __init__(self, host):
-        super().__init__(host)
+    def __init__(self, host, req_headers=None):
+        super().__init__(host, req_headers)
         self.fw = None
 
     @staticmethod
@@ -122,7 +122,7 @@ class DeployDev(HttpDevice):
             self.fw = fw
 
             threading.Thread(target=self.threaded_upload, args=()).start()
-            time.sleep(1)
+            time.sleep(2)
             while self.fw is not None:
                 upload_status = self.http_get_status_json(DeployDev.JSON_STATUS_UPLOAD)['fileupload']
                 total = upload_status['total']

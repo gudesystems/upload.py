@@ -75,7 +75,10 @@ class HttpDevice(DeviceValues):
     def set_http_retries(self, retries):
         self.httpRetries = retries
 
-    def http_get(self, filename, cgi_get_params=None):
+    def set_req_headers(self, req_headers=None):
+        self.req_headers = req_headers
+
+    def http_get(self, filename, cgi_get_params=None, req_headers=None):
         url = self.get_http_url(filename)
         auth = self.get_http_auth()
 
@@ -92,8 +95,8 @@ class HttpDevice(DeviceValues):
                 start = time.time()
                 if self.httpAutoAddAjaxTimestamp:
                     cgi_get_params["_"] = int(time.time())
-                # TODO: What is {'Connection': 'close'} for ? DOES NOT WORK WITH PORT FORWARDING
-                r = requests.get(url, params=cgi_get_params, verify=False, timeout=self.httpTimeout, auth=auth, headers={'Connection': 'close'})
+                # headers={'Connection': 'close'} DOES NOT WORK WITH PORT FORWARDING
+                r = requests.get(url, params=cgi_get_params, verify=False, timeout=self.httpTimeout, auth=auth, headers=req_headers)
                 stop = time.time()
             except requests.exceptions.Timeout:
                 log.info(f"Timeout {url} {cgi_get_params} {retries}")
@@ -108,16 +111,16 @@ class HttpDevice(DeviceValues):
                 raise ValueError("http request error {0}".format(r.status_code))
         raise ValueError("http request failed")
 
-    def http_ping(self, timeout=1.0):
+    def http_ping(self, timeout=1.0, req_headers=None):
         url = self.get_http_url('index.html')
         auth = self.get_http_auth()
         try:
-            r = requests.get(url, params={}, verify=False, timeout=timeout, auth=auth, headers={'Connection': 'close'})
+            r = requests.get(url, params={}, verify=False, timeout=timeout, auth=auth, headers=req_headers)
             return r.status_code == 200
         except (ValueError, Exception):
             return False
 
-    def upload_file(self, file_data, upload_type, cgi_get_params=None, ret_ressource='fwupdate.txt', timeout=10.0):
+    def upload_file(self, file_data, upload_type, cgi_get_params=None, ret_ressource='fwupdate.txt', timeout=10.0, req_headers=None):
         url = self.get_http_url(ret_ressource)
         auth = self.get_http_auth()
 
@@ -128,7 +131,7 @@ class HttpDevice(DeviceValues):
         files = {'fwupload': file_data}
 
         start = time.time()
-        r = requests.post(url, params=cgi_get_params, files=files, verify=False, timeout=timeout, auth=auth)
+        r = requests.post(url, params=cgi_get_params, files=files, verify=False, timeout=timeout, auth=auth, headers=req_headers)
         stop = time.time()
 
         if r.status_code == 200:
@@ -142,29 +145,29 @@ class HttpDevice(DeviceValues):
         log.debug(file_data)
         return self.upload_file(file_data, self.CGI_UPLOAD_TYPE_CONFIG)
 
-    def http_get_json(self, file, cgi_get_params=None):
+    def http_get_json(self, file, cgi_get_params=None, req_headers=None):
         if cgi_get_params is None:
             cgi_get_params = {}
 
-        json_string = self.http_get(file, cgi_get_params)
+        json_string = self.http_get(file, cgi_get_params, req_headers)
         if json_string:
             return json.loads(json_string)
         else:
             return None
 
-    def http_get_status_json(self, components, cgi_get_params=None):
+    def http_get_status_json(self, components, cgi_get_params=None, req_headers=None):
         if cgi_get_params is None:
             cgi_get_params = {}
         cgi_get_params["components"] = components
-        return self.http_get_json("status.json", cgi_get_params)
+        return self.http_get_json("status.json", cgi_get_params, req_headers)
 
-    def http_get_config_json(self, components, cgi_get_params=None):
+    def http_get_config_json(self, components, cgi_get_params=None, req_headers=None):
         if cgi_get_params is None:
             cgi_get_params = {}
         cgi_get_params["components"] = components
-        return self.http_get_json("config.json", cgi_get_params)
+        return self.http_get_json("config.json", cgi_get_params, req_headers)
 
-    def http_cgi_json_cmd(self, cmd, params=None, merge_defaults=True):
+    def http_cgi_json_cmd(self, cmd, params=None, merge_defaults=True, req_headers=None):
         if params is None:
             params = {}
 
@@ -181,14 +184,14 @@ class HttpDevice(DeviceValues):
         my_params["components"] = json_map['resource']['components']
         my_params.update(params)
 
-        return self.http_get_json(json_map['resource']['file'], my_params)
+        return self.http_get_json(json_map['resource']['file'], my_params, req_headers)
 
-    def get_all_json(self):
-        self.allConfigJson = self.http_get_config_json(self.JSON_ALL)
-        self.allStatusJson = self.http_get_status_json(self.JSON_ALL)
+    def get_all_json(self, req_headers=None):
+        self.allConfigJson = self.http_get_config_json(self.JSON_ALL, req_headers)
+        self.allStatusJson = self.http_get_status_json(self.JSON_ALL, req_headers)
 
-    def get_eprom_json(self, remove_volatiles=True):
-        self.entities = self.http_get_json('eprom.json')
+    def get_eprom_json(self, remove_volatiles=True, req_headers=None):
+        self.entities = self.http_get_json('eprom.json', req_headers)
 
         if not self.entities:
             return False
@@ -227,7 +230,7 @@ class HttpDevice(DeviceValues):
         self.allStatusJson = None
         self.entities = None
 
-    def wait_reboot(self, max_wait_secs=20.0, pre_wait_secs=5.0):
+    def wait_reboot(self, max_wait_secs=20.0, pre_wait_secs=5.0, req_headers=None):
         total = int(pre_wait_secs) + int(max_wait_secs)
         for i in range(0, int(pre_wait_secs)):
             # log.info(".")
@@ -235,7 +238,7 @@ class HttpDevice(DeviceValues):
             time.sleep(1)
         retries = max_wait_secs
         while retries:
-            if self.http_ping(1.0):
+            if self.http_ping(1.0, req_headers):
                 print_progress_bar(total, total, fill='#', clear=' ', unit='seconds',
                                    actual=int(pre_wait_secs) + max_wait_secs - retries)
                 log.info("{0}:{1} up".format(self.host, self.httpOpts["port"]))
@@ -250,8 +253,8 @@ class HttpDevice(DeviceValues):
         log.error("ERROR: no reply, giving up")
         return False
 
-    def reboot_cmd(self, cmd, wait_reboot=False, max_wait_secs=20.0):
-        self.http_cgi_json_cmd(cmd)
+    def reboot_cmd(self, cmd, wait_reboot=False, max_wait_secs=20.0, req_headers=None):
+        self.http_cgi_json_cmd(cmd, req_headers)
         if wait_reboot:
             return self.wait_reboot(max_wait_secs)
         else:
@@ -278,31 +281,31 @@ class HttpDevice(DeviceValues):
     #
     # switch port
     #
-    def http_switch_port(self, port, status):
-        json_data = self.http_cgi_json_cmd(self.CGI_CMD_SWITCH_POWERPORTS, {"p": port, "s": status})
+    def http_switch_port(self, port, status, req_headers=None):
+        json_data = self.http_cgi_json_cmd(self.CGI_CMD_SWITCH_POWERPORTS, {"p": port, "s": status}, req_headers)
         if json_data['outputs'][port-1]['state'] != status:
             raise ValueError("illegal switch state")
         return json_data
 
-    def set_bank_source(self, bank_id, source):
+    def set_bank_source(self, bank_id, source, req_headers=None):
         json_data = self.http_cgi_json_cmd(self.CGI_CMD_CONFIG_POWERPORTS,
-                                           {f'banksource[{bank_id}]': '.'.join((str(x) for x in source))})
+                                           {f'banksource[{bank_id}]': '.'.join((str(x) for x in source))}, req_headers)
         return json_data
 
-    def http_switch_ets_power_source(self, source):
-        json_data = self.http_cgi_json_cmd(self.CGI_CMD_SWITCH_ETS, {"switch": source})
+    def http_switch_ets_power_source(self, source, req_headers=None):
+        json_data = self.http_cgi_json_cmd(self.CGI_CMD_SWITCH_ETS, {"switch": source}, req_headers)
         return json_data['hardware']['power'][0]['outputs'][0]['source']['connected']
 
     #
     # cancel Batchmode
     #
-    def http_cancel_batch_mode(self, port):
-        return self.http_cgi_json_cmd(self.CGI_CMD_CANCEL_BATCHMODES, {"p": port})
+    def http_cancel_batch_mode(self, port, req_headers=None):
+        return self.http_cgi_json_cmd(self.CGI_CMD_CANCEL_BATCHMODES, {"p": port}, req_headers)
 
     #
     # config Clock (helper):
     #
-    def http_config_clock(self, ntp_enabled, ntp_srv_1, ntp_srv_2, tz_offset, dst_enabled):
+    def http_config_clock(self, ntp_enabled, ntp_srv_1, ntp_srv_2, tz_offset, dst_enabled, req_headers=None):
         cgi = {
            "ntp": ntp_enabled,
            "ntpsrv1": ntp_srv_1,
@@ -310,23 +313,23 @@ class HttpDevice(DeviceValues):
            "tz_offset": tz_offset,
            "dst": dst_enabled
         }
-        return self.http_cgi_json_cmd(self.CGI_CMD_CONFIG_CLOCK, cgi)
+        return self.http_cgi_json_cmd(self.CGI_CMD_CONFIG_CLOCK, cgi, req_headers)
 
-    def trigger_event_message(self, typ, idx=0, context=0, pipe=DeviceValues.EVENT_MSG_PIPES_ETH, extra=None):
+    def trigger_event_message(self, typ, idx=0, context=0, pipe=DeviceValues.EVENT_MSG_PIPES_ETH, extra=None, req_headers=None):
         cgi = {'id': typ, 'idx': idx, 'context': context, 'pipe': pipe}
         if extra is not None:
             cgi['extra'] = extra
         log.info(f"Trigger test event {typ}.{idx} context({context}) pipe({pipe}) extra({extra})")
-        return self.http_cgi_json_cmd(HttpDevice.CGI_CMD_TEST_EVENT_MSG, cgi)
+        return self.http_cgi_json_cmd(HttpDevice.CGI_CMD_TEST_EVENT_MSG, cgi, req_headers)
 
-    def export_config(self):
-        return self.http_get("config.txt")
+    def export_config(self, req_headers=None):
+        return self.http_get("config.txt", req_headers)
 
-    def get_ram_usage(self):
-        debug_json = self.http_get_json('debug.json')
+    def get_ram_usage(self, req_headers=None):
+        debug_json = self.http_get_json('debug.json', req_headers)
         return debug_json["internal"]["free_mem"], debug_json["external"]["free_mem"]
 
-    def get_mem_log(self, facility=None, max_level=None, minid=None):
+    def get_mem_log(self, facility=None, max_level=None, minid=None, req_headers=None):
         cgi = {}
         if facility is not None:
             cgi['facility'] = facility
@@ -335,7 +338,7 @@ class HttpDevice(DeviceValues):
         if minid is not None:
             cgi['minid'] = minid
 
-        return self.http_get_json('memlog.json', cgi)
+        return self.http_get_json('memlog.json', cgi, req_headers)
 
     def get_mem_log_last_id(self, facility=None, max_level=None):
         last_id = 0
@@ -358,8 +361,9 @@ class HttpDevice(DeviceValues):
 
         return hyst
 
-    def __init__(self, host):
+    def __init__(self, host, req_headers=None):
         self.host = host
+        self.req_headers = req_headers
         self.allConfigJson = None
         self.allStatusJson = None
         self.entities = None
