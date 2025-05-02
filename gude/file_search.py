@@ -99,12 +99,12 @@ def get_config(unique_items, config=None):
 
         filename = ''
         if item['model_oem'] == 'online':
-            filename = 'firmware-' + item['name'] + item['model_nbr'] + '_v{version}.bin'
+            filename = 'firmware-' + item['name'] + item['model_nbr'].replace("R2", "-r2") + '_v{version}.bin'
         else:
             filename = 'firmware_' + item['model_nbr'] + '_' + item['model_oem'] + '_v{version}.bin'
 
         config[item['model_nbr']] = {
-            'json': 'firmware-' + item['name'] + item['model_nbr'] + '.json',
+            'json': 'firmware-' + item['name'] + item['model_nbr'].replace("R2", "-r2") + '.json',
             'version': item['version'],
             'filename': filename,
             'path': item['dir']
