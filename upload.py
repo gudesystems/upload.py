@@ -5,7 +5,7 @@ from argparse import ArgumentParser, Namespace
 import os
 import ipaddress
 from socket import gaierror
-from requests.exceptions import ConnectionError
+from requests.exceptions import Timeout, HTTPError
 from typing import Tuple
 
 from gude.deployDev import DeployDev
@@ -19,6 +19,55 @@ import logging
 logging.basicConfig(format='%(asctime)s %(name)-18s %(levelname)-8s %(message)s')
 log = logging.getLogger(__name__)  # custom logger name can be set
 log.setLevel(logging.getLevelName('DEBUG'))
+
+
+def add_devices_to_config(_args: Namespace, _config: ConfigParser) -> ConfigParser:
+    """
+    Add devices from command line args to the config parser object
+    
+    :param _args: Parsed command line arguments
+    :param _config: Configuration parser object
+    :return: Modified configuration parser object
+    """
+    if _args.devices is not None:
+        log.debug(f"Adding devices to config: {_args.devices}")
+        for section, settings in _args.devices.items():
+            set_config_defaults(_config, section, settings, overwrite=True)
+    return _config
+
+
+def set_config_defaults(_config: ConfigParser, section: str, settings: dict, overwrite: bool = False) -> None:
+    """
+    Function to set default configuration values for a section.
+    
+    :param _config: Configuration parser object to be edited
+    :param section: Section name to apply settings to
+    :param settings: Dictionary of default settings to apply
+    :param overwrite: Whether to overwrite existing values (default: False)
+    """
+    if not _config.has_section(section):
+        _config[section] = {}
+    
+    for key, value in settings.items():
+        if overwrite or not _config.has_option(section, key):
+            _config[section][key] = str(value)
+
+# Default settings dictionaries
+DEFAULT_SETTINGS = {
+    'defaults': {
+        'httpTimeout': '3.0',
+        'gblTimeout': '1.0',
+        'fwdir': 'fw'
+    },
+    'httpDefaults': {
+        'port': '80',
+        'ssl': '0',
+        'auth': '0',
+        'username': '',
+        'password': ''
+    },
+    'hosts': {}
+}
 
 
 def parse_args() -> Tuple[Namespace, ConfigParser, ConfigParser, str]:
@@ -42,6 +91,8 @@ def parse_args() -> Tuple[Namespace, ConfigParser, ConfigParser, str]:
     parser.add_argument('-i', '--iprange', nargs="+",  help='range of ip address to manage')
     parser.add_argument('-s', '--search_folder', help='folder to search for binary')
     parser.add_argument('-r', '--repl_prod_id', help='product ids to replace', default={'2110': '2111'}) # , '8221': '822x', '8226': '822x'
+    parser.add_argument('-d', '--devices', help="overwrites upload.ini like {'httpDefaults': {'port'=80, 'ssl'=0, 'auth'=0, 'username'='','password'=''} }", default=None, type=json.loads)
+    # -d "{\"httpDefaults\":{\"username\":\"admin\",\"password\":\"admin\"}}"
     parser.add_argument('-H', '--header', help='Setting custom http header like \'{"Connection": "close"}\'', default=None, type=json.loads)
     _args = parser.parse_args()
 
@@ -49,9 +100,13 @@ def parse_args() -> Tuple[Namespace, ConfigParser, ConfigParser, str]:
     _config = ConfigParser(strict=False)
     _config.read(_args.upload_ini)
 
-    set_host_default(_config)
-    set_default(_config)
-    set_http_defaults(_config)
+    _config = add_devices_to_config(_args, _config)
+
+    configure_auth_settings(_config)
+
+    # Apply default settings using the generalized function
+    for section, settings in DEFAULT_SETTINGS.items():
+        set_config_defaults(_config, section, settings)
 
     _firmware = ConfigParser(strict=False)
     if _args.search_folder is not None and os.path.isdir(_args.search_folder):
@@ -67,51 +122,6 @@ def parse_args() -> Tuple[Namespace, ConfigParser, ConfigParser, str]:
     _my_ip = _config['defaults']['myIp'] if 'myIp' in _config['defaults'] else '0.0.0.0'
 
     return _args, _config, _firmware, _my_ip
-
-
-def set_host_default(_config):
-    """
-    Function to set host section.
-    :param _config ConfigParser: config parser to be edited
-    """
-    if not _config.has_section("hosts"):
-        _config["hosts"] = {}
-
-
-def set_default(_config, section='defaults'):
-    """
-    Function to set defaults.
-    :param _config ConfigParser: config parser to be edited
-    :param str section: Relevant section
-    """
-    if not _config.has_section(section):
-        _config[section] = {}
-    if not _config.has_option(section, 'httpTimeout'):
-        _config[section]['httpTimeout'] = '3.0'
-    if not _config.has_option(section, 'gblTimeout'):
-        _config[section]['gblTimeout'] = '1.0'
-    if not _config.has_option(section, 'fwdir'):
-        _config[section]['fwdir'] = 'fw'
-
-
-def set_http_defaults(_config, section='httpDefaults'):
-    """
-    Function to set httpDefaults.
-    :param _config ConfigParser: config parser to be edited
-    :param str section: Relevant section
-    """
-    if not _config.has_section(section):
-        _config[section] = {}
-    if not _config.has_option(section, 'port'):
-        _config[section]['port'] = '80'
-    if not _config.has_option(section, 'ssl'):
-        _config[section]['ssl'] = '0'
-    if not _config.has_option(section, 'auth'):
-        _config[section]['auth'] = '0'
-    if not _config.has_option(section, 'username'):
-        _config[section]['username'] = ''
-    if not _config.has_option(section, 'password'):
-        _config[section]['password'] = ''
 
 
 def add_iprange_to_config(_iprange: str, _config: ConfigParser):
@@ -219,7 +229,8 @@ def iterate_list(_ip_list: list, _firmware: ConfigParser, _config: ConfigParser,
         # this ensures mapping of device dependant config
         config_key = ip if ip in _config else 'httpDefaults'
 
-        set_http_defaults(_config, config_key)
+        # Apply HTTP defaults using the generalized function
+        set_config_defaults(_config, config_key, DEFAULT_SETTINGS['httpDefaults'])
 
         # config_key corresponds to the matching http configuration that can be found in upload.ini
         log.debug(f"Setting up DeployDev with config-key: {config_key}")
@@ -229,6 +240,21 @@ def iterate_list(_ip_list: list, _firmware: ConfigParser, _config: ConfigParser,
                            _config[config_key]['password'])
         dev.set_http_timeout(float(_config['defaults']['httpTimeout']))
         dev.set_http_retries(0)
+
+        # this may fail due to https
+        # TODO: Rework?
+        try:
+            device_data = dev.http_get_status_json(DeployDev.JSON_STATUS_MISC)['misc']
+        except HTTPError as e:
+            if e.response.status_code == 401:
+                log.error(f"Authentication Error on defined port/protocol (http OR https) on {ip} {e}")
+                continue
+            else:
+                log.error(f"HTTPError on {ip} {e}")
+                raise  # re-raise other HTTP errors
+        except Timeout as to:
+            log.error(f"Could not reach device on defined port/protocol (http OR https) on {ip} {to}")
+            continue
 
         gbl_error = False
         try:
@@ -261,22 +287,11 @@ def iterate_list(_ip_list: list, _firmware: ConfigParser, _config: ConfigParser,
             except ValueError as ve:
                 log.error(f"Could not reach device {ip} {ve}")
                 continue
-            except ConnectionError as ce:
-                log.error(f"Could not reach device on defined port/protocol (http OR https) on {ip} {ce}")
-                continue
 
         log.debug(f"Getting config filename ...")
         cfg_filename = DeployDev.get_config_filename('config', 'config', 'txt', mac, ip, _args.configip)
         log.debug(f"Getting ssl-cert filename ...")
         ssl_cert_filename = DeployDev.get_config_filename('ssl', 'cert', 'pem', mac, ip, _args.configip)
-
-        # this may fail due to https
-        # TODO: Rework?
-        try:
-            device_data = dev.http_get_status_json(DeployDev.JSON_STATUS_MISC)['misc']
-        except ConnectionError as ce:
-            log.error(f"Could not reach device on defined port/protocol (http OR https) on {ip} {ce}")
-            continue
 
         # --- before logging/deploy ---
         actual_prod_id = device_data['prodid']
@@ -351,6 +366,22 @@ def iterate_list(_ip_list: list, _firmware: ConfigParser, _config: ConfigParser,
 
         # except Exception as e:
         #     log.warning(f"skipped : {ip} {e}")
+
+
+def configure_auth_settings(_config: ConfigParser) -> None:
+    """
+    Configure authentication settings for sections that have username and password but no auth flag set.
+    
+    :param _config: Configuration parser object to be edited
+    """
+    for section in _config.sections():
+        has_user = _config[section].get('username') is not None
+        has_pass = _config[section].get('password') is not None
+        has_auth = _config[section].get('auth') is not None
+
+        if has_user and has_pass and not has_auth:
+            # mark this section as needing auth
+            _config[section]['auth'] = '1'
 
 
 # get all args
