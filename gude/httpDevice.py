@@ -106,9 +106,14 @@ class HttpDevice(DeviceValues):
             if r.status_code == 200:
                 self.set_last_req(r.url, r.status_code, (stop - start), len(r.text))
                 return r.text
+            elif r.status_code == 401:
+                raise requests.exceptions.HTTPError("401 Unauthorized", response=r)
             else:
                 self.set_last_req(r.url, r.status_code, (stop - start), None)
                 raise ValueError("http request error {0}".format(r.status_code))
+        elif stop is None:
+            raise requests.exceptions.Timeout("Timeout", response=r)
+            
         raise ValueError("http request failed")
 
     def http_ping(self, timeout=1.0, req_headers=None):
