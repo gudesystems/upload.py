@@ -121,6 +121,7 @@ class DeployDev(HttpDevice):
 
             self.fw = fw
 
+            # with pf this may raise a requests.exceptions.ConnectionError: HTTPConnectionPool(host='', port=''): Read timed out.
             threading.Thread(target=self.threaded_upload, args=()).start()
             time.sleep(2)
             while self.fw is not None:
