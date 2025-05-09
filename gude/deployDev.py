@@ -145,6 +145,7 @@ class DeployDev(HttpDevice):
             log.info(f"Firmware update {fw[0][1]}.{fw[0][2]}.{fw[0][3]} -> {fw[1][1]}.{fw[1][2]}.{fw[1][3]}, "
                      f"device is rebooting to extract firmware file, please wait...")
             self.reboot(wait_reboot=True, max_wait_secs=85)
+            return True
 
     def upload_config(self, cfg_file_name, config_ip):
         cfg = self.get_file_content(cfg_file_name)

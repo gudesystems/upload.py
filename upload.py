@@ -6,7 +6,8 @@ import os
 import ipaddress
 from socket import gaierror
 from requests.exceptions import Timeout, HTTPError
-from typing import Tuple
+from typing import Tuple, Optional
+from dataclasses import dataclass
 
 from gude.deployDev import DeployDev
 from gude.gblib import Gblib
@@ -201,7 +202,19 @@ def generate_ip_list(_hosts: list, _my_ip: str, _gbl_timeout: float) -> list:
     return _ip_list
 
 
-def iterate_list(_ip_list: list, _firmware: ConfigParser, _config: ConfigParser, _args: object):
+@dataclass
+class DeviceResult:
+    ip: str
+    product_name: str
+    mac: str
+    initial_firmware: str
+    final_firmware: Optional[str] = None
+    firmware_status: str = "not attempted"
+    success: bool = False
+    error_message: Optional[str] = None
+
+
+def iterate_list(_ip_list: list, _firmware: ConfigParser, _config: ConfigParser, _args: object) -> list[DeviceResult]:
     """
     Function that iterates over all hosts from _ip_list hosts,
     matching corresponding firmware in _firmware,
@@ -211,161 +224,171 @@ def iterate_list(_ip_list: list, _firmware: ConfigParser, _config: ConfigParser,
     :param ConfigParser _firmware: containing firmware information
     :param ConfigParser _config: containing http config
     :param Namespace _args: additional options
+    Returns a list of DeviceResult objects containing the processing status of each device.
     """
 
     # TODO: Is GBL in this context necessary?
     gbl = Gblib()
 
+    results = []
     log.debug(f"trying {len(_ip_list)} devices")
     for ip in _ip_list:
-        log.debug("Initializing DeployDev")
-        # TODO: ip can be str or 'IPv4Address' or 'IPv6Address'!
-        if isinstance(ip, str) and ip.count(':') == 1:
-            dev_ip = ip.split(':')[0]
-        else:
-            dev_ip = ip
-        dev = DeployDev(dev_ip, req_headers=_args.header)
-
-        # this ensures mapping of device dependant config
-        config_key = ip if ip in _config else 'httpDefaults'
-
-        # Apply HTTP defaults using the generalized function
-        set_config_defaults(_config, config_key, DEFAULT_SETTINGS['httpDefaults'])
-
-        # config_key corresponds to the matching http configuration that can be found in upload.ini
-        log.debug(f"Setting up DeployDev with config-key: {config_key}")
-        dev.set_http_port(_config[config_key]['port'], _config[config_key]['ssl'] == '1')
-        dev.set_basic_auth(_config[config_key]['auth'] == '1',
-                           _config[config_key]['username'],
-                           _config[config_key]['password'])
-        dev.set_http_timeout(float(_config['defaults']['httpTimeout']))
-        dev.set_http_retries(0)
-
-        # this may fail due to https
-        # TODO: Rework?
+        result = DeviceResult(ip=str(ip), product_name="unknown", mac="unknown", initial_firmware="unknown")
+        
         try:
-            device_data = dev.http_get_status_json(DeployDev.JSON_STATUS_MISC)['misc']
-        except HTTPError as e:
-            if e.response.status_code == 401:
-                log.error(f"Authentication Error on defined port/protocol (http OR https) on {ip} {e}")
-                continue
+            log.debug("Initializing DeployDev")
+            # TODO: ip can be str or 'IPv4Address' or 'IPv6Address'!
+            if isinstance(ip, str) and ip.count(':') == 1:
+                dev_ip = ip.split(':')[0]
             else:
-                log.error(f"HTTPError on {ip} {e}")
-                raise  # re-raise other HTTP errors
-        except Timeout as to:
-            log.error(f"Could not reach device on defined port/protocol (http OR https) on {ip} {to}")
-            continue
-
-        gbl_error = False
-        try:
-            # This hase been moved from top of function
-            log.info(f"trying {ip}... (via GBL/UDP)")
-            # update gbl info (dstMAC, bootl_mode, allow_go_boot, dev_info)
+                dev_ip = ip
+            dev = DeployDev(dev_ip, req_headers=_args.header)
+            # this ensures mapping of device dependant config
+            config_key = ip if ip in _config else 'httpDefaults'
+            # Apply HTTP defaults using the generalized function
+            set_config_defaults(_config, config_key, DEFAULT_SETTINGS['httpDefaults'])
+            # config_key corresponds to the matching http configuration that can be found in upload.ini
+            log.debug(f"Setting up DeployDev with config-key: {config_key}")
+            dev.set_http_port(_config[config_key]['port'], _config[config_key]['ssl'] == '1')
+            dev.set_basic_auth(_config[config_key]['auth'] == '1',
+                               _config[config_key]['username'],
+                               _config[config_key]['password'])
+            dev.set_http_timeout(float(_config['defaults']['httpTimeout']))
+            dev.set_http_retries(0)
+            # this may fail due to https
+            # TODO: Rework?
             try:
-                if not gbl.check_mac(str(ip)):
-                    log.warning("GBL Timeout (UDP port 50123)")
-                    # continue
+                device_data = dev.http_get_status_json(DeployDev.JSON_STATUS_MISC)['misc']
+            except HTTPError as e:
+                if e.response.status_code == 401:
+                    log.error(f"Authentication Error on defined port/protocol (http OR https) on {ip} {e}")
+                    continue
+                else:
+                    log.error(f"HTTPError on {ip} {e}")
+                    raise  # re-raise other HTTP errors
+            except Timeout as to:
+                log.error(f"Could not reach device on defined port/protocol (http OR https) on {ip} {to}")
+                continue
+
+            result.product_name = device_data['product_name']
+            result.initial_firmware = device_data['firm_v']
+
+            gbl_error = False
+            try:
+                # This hase been moved from top of function
+                log.info(f"trying {ip}... (via GBL/UDP)")
+                # update gbl info (dstMAC, bootl_mode, allow_go_boot, dev_info)
+                try:
+                    if not gbl.check_mac(str(ip)):
+                        log.warning("GBL Timeout (UDP port 50123)")
+                        # continue
+                        gbl_error = True
+                    # extract mac (bytes longer than 255 result in two hex values so b'\x192' results in 1*16+9 and 2*16+0)
+                    # this dec values need to be converted back to hex ('x') as string with the length 2 ('02')
+                    mac = '_'.join(f'{c:02x}' for c in gbl.dstMAC)
+                except ConnectionResetError:
+                    log.error("Could not send broadcast, connection has been reset ...")
                     gbl_error = True
-                # extract mac (bytes longer than 255 result in two hex values so b'\x192' results in 1*16+9 and 2*16+0)
-                # this dec values need to be converted back to hex ('x') as string with the length 2 ('02')
-                mac = '_'.join(f'{c:02x}' for c in gbl.dstMAC)
-            except ConnectionResetError:
-                log.error("Could not send broadcast, connection has been reset ...")
+            except gaierror:
                 gbl_error = True
-        except gaierror:
-            gbl_error = True
-            # TODO: Resolve hostname beforehand?
-            log.warning("Could not resolve address")
-        if gbl_error:
-            log.info(f"trying {ip}... (via HTTP(s) )")
-            try:
-                mac = dev.http_get_status_json(DeployDev.JSON_STATUS_ETHERNET, req_headers=None)['ethernet']['mac'].replace(':', '_')
-                log.debug(f"got mac {mac}... (via HTTP(s) )")
-            except TimeoutError:
-                log.error(f"Could not reach device {ip}")
-                continue
-            except ValueError as ve:
-                log.error(f"Could not reach device {ip} {ve}")
-                continue
+                # TODO: Resolve hostname beforehand?
+                log.warning("Could not resolve address")
+            if gbl_error:
+                log.info(f"trying {ip}... (via HTTP(s) )")
+                try:
+                    mac = dev.http_get_status_json(DeployDev.JSON_STATUS_ETHERNET, req_headers=None)['ethernet']['mac'].replace(':', '_')
+                    log.debug(f"got mac {mac}... (via HTTP(s) )")
+                except TimeoutError:
+                    log.error(f"Could not reach device {ip}")
+                    continue
+                except ValueError as ve:
+                    log.error(f"Could not reach device {ip} {ve}")
+                    continue
 
-        log.debug(f"Getting config filename ...")
-        cfg_filename = DeployDev.get_config_filename('config', 'config', 'txt', mac, ip, _args.configip)
-        log.debug(f"Getting ssl-cert filename ...")
-        ssl_cert_filename = DeployDev.get_config_filename('ssl', 'cert', 'pem', mac, ip, _args.configip)
+            result.mac = mac
 
-        # --- before logging/deploy ---
-        actual_prod_id = device_data['prodid']
-        selected_prod_id = None
+            log.debug(f"Getting config filename ...")
+            cfg_filename = DeployDev.get_config_filename('config', 'config', 'txt', mac, ip, _args.configip)
+            log.debug(f"Getting ssl-cert filename ...")
+            ssl_cert_filename = DeployDev.get_config_filename('ssl', 'cert', 'pem', mac, ip, _args.configip)
 
-        # 1) Try exact match on the original prodid
-        if actual_prod_id in _firmware:
-            selected_prod_id = actual_prod_id
-
-        # 2) If no match yet, apply your replacement map
-        if not selected_prod_id:
-            repl_map = _args.repl_prod_id
-            if actual_prod_id in repl_map:
-                candidate = repl_map[actual_prod_id]
-                if candidate in _firmware:
-                    selected_prod_id = candidate
-
-        # 3) If still nothing, and prodid contains "xx", inject the real number from product_name
-        if not selected_prod_id and "xx" in actual_prod_id:
-            m = re.search(r"(\d+)-", device_data["product_name"])
-            if m:
-                # take the last 2 digits of the number you found to fill "xx"
-                real_digits = m.group(1)[-2:]
-                candidate = actual_prod_id.replace("xx", real_digits)
-                if candidate in _firmware:
-                    selected_prod_id = candidate
-
-        # 4) Finally, if still nothing and prodid contains "xx", do a regex wildcard match
-        if not selected_prod_id and "xx" in actual_prod_id:
-            # build a pattern like "^80\d\dR2?$" or "^21\d\ddi?$" etc.
-            pat = "^" + re.escape(actual_prod_id).replace("xx", r"\d\d") + "$"
-            for fw_id in _firmware:
-                if re.match(pat, fw_id):
-                    selected_prod_id = fw_id
-                    break
-
-        # update device_data and log
-        if selected_prod_id:
-            device_data["prodid"] = selected_prod_id
-            log.info(
-                f"{device_data['product_name']} "
-                f"({actual_prod_id} → {selected_prod_id}, {mac}) at {ip}\n"
-                + " " * 52
-                + f"running Firmware v{device_data['firm_v']}"
-            )
-        else:
-            log.warning(f"No firmware entry found for product '{actual_prod_id}'")
-            # …handle missing‐firmware case (raise, skip, default, etc.)…
-
-        try:
+            # --- before logging/deploy ---
+            actual_prod_id = device_data['prodid']
+            selected_prod_id = None
+            # 1) Try exact match on the original prodid
+            if actual_prod_id in _firmware:
+                selected_prod_id = actual_prod_id
+            # 2) If no match yet, apply your replacement map
+            if not selected_prod_id:
+                repl_map = _args.repl_prod_id
+                if actual_prod_id in repl_map:
+                    candidate = repl_map[actual_prod_id]
+                    if candidate in _firmware:
+                        selected_prod_id = candidate
+            # 3) If still nothing, and prodid contains "xx", inject the real number from product_name
+            if not selected_prod_id and "xx" in actual_prod_id:
+                m = re.search(r"(\d+)-", device_data["product_name"])
+                if m:
+                    # take the last 2 digits of the number you found to fill "xx"
+                    real_digits = m.group(1)[-2:]
+                    candidate = actual_prod_id.replace("xx", real_digits)
+                    if candidate in _firmware:
+                        selected_prod_id = candidate
+            # 4) Finally, if still nothing and prodid contains "xx", do a regex wildcard match
+            if not selected_prod_id and "xx" in actual_prod_id:
+                # build a pattern like "^80\d\dR2?$" or "^21\d\ddi?$" etc.
+                pat = "^" + re.escape(actual_prod_id).replace("xx", r"\d\d") + "$"
+                for fw_id in _firmware:
+                    if re.match(pat, fw_id):
+                        selected_prod_id = fw_id
+                        break
+            # update device_data and log
+            if selected_prod_id:
+                device_data["prodid"] = selected_prod_id
+                log.info(
+                    f"{device_data['product_name']} "
+                    f"({actual_prod_id} → {selected_prod_id}, {mac}) at {ip}\n"
+                    + " " * 52
+                    + f"running Firmware v{device_data['firm_v']}"
+                )
+            else:
+                log.warning(f"No firmware entry found for product '{actual_prod_id}'")
+                # …handle missing‐firmware case (raise, skip, default, etc.)…
             # deploy Firmware
             if device_data['prodid'] in _firmware:
-                dev.update_firmware(device_data, _firmware, _config['defaults']['fwdir'],
+                try:
+                    updated = dev.update_firmware(device_data, _firmware, _config['defaults']['fwdir'],
                                     forced=_args.forcefw, online_update=_args.onlineupdate)
-        except ValueError as ve:
-            log.warning(f"skipped firmware update: {ip} {ve}")
+                    if updated:
+                        misc = dev.http_get_status_json(DeployDev.JSON_STATUS_MISC)['misc']
+                        result.final_firmware = misc['firm_v']
+                        result.firmware_status = f"updated from {result.initial_firmware} to {result.final_firmware}"
+                    else:
+                        result.firmware_status = "up to date"
+                except ValueError as ve:
+                    result.firmware_status = f"failed: {str(ve)}"
+                    log.warning(f"skipped firmware update: {ip} {ve}")
+            # deploy Configuration
+            if cfg_filename is not None:
+                log.debug(f"Uploading {cfg_filename} ...")
+                dev.upload_config(cfg_filename, _args.configip)
+            # deploy SSL certificate
+            if ssl_cert_filename is not None:
+                log.debug(f"Uploading {ssl_cert_filename} ...")
+                dev.upload_ssl_certificate(ssl_cert_filename)
+            # print FW Version and configured Hostname
+            ipv4 = dev.http_get_config_json(dev.JSON_CONFIG_IP)['ipv4']
+            misc = dev.http_get_status_json(DeployDev.JSON_STATUS_MISC)['misc']
+            log.info(f"device with IP {dev.host} has hostname {ipv4['hostname']} and FW Version {misc['firm_v']}")
 
-        # deploy Configuration
-        if cfg_filename is not None:
-            log.debug(f"Uploading {cfg_filename} ...")
-            dev.upload_config(cfg_filename, _args.configip)
-
-        # deploy SSL certificate
-        if ssl_cert_filename is not None:
-            log.debug(f"Uploading {ssl_cert_filename} ...")
-            dev.upload_ssl_certificate(ssl_cert_filename)
-
-        # print FW Version and configured Hostname
-        ipv4 = dev.http_get_config_json(dev.JSON_CONFIG_IP)['ipv4']
-        misc = dev.http_get_status_json(DeployDev.JSON_STATUS_MISC)['misc']
-        log.info(f"device with IP {dev.host} has hostname {ipv4['hostname']} and FW Version {misc['firm_v']}")
-
-        # except Exception as e:
-        #     log.warning(f"skipped : {ip} {e}")
+            result.success = True
+        except Exception as e:
+            result.error_message = str(e)
+            log.warning(f"skipped : {ip} {e}")
+        
+        results.append(result)
+    
+    return results
 
 
 def configure_auth_settings(_config: ConfigParser) -> None:
@@ -394,4 +417,17 @@ add_iprange_to_config(args.iprange, config)
 ip_list = generate_ip_list(config['hosts'], my_ip, float(config['defaults']['gblTimeout']))
 
 # iterate devices, get each dev info, update fw, config and certificate
-iterate_list(ip_list, firmware, config, args)
+results = iterate_list(ip_list, firmware, config, args)
+
+# Display results summary
+log.info("\nDevice Processing Summary:")
+log.info("-" * 80)
+for result in results:
+    status = "✓" if result.success else "✗"
+    log.info(f"{status} Device {result.ip} ({result.product_name}, {result.mac})")
+    log.info(f"   Firmware: {result.firmware_status}")
+    if result.error_message:
+        log.info(f"   Error: {result.error_message}")
+log.info("-" * 80)
+success_count = sum(1 for r in results if r.success)
+log.info(f"Successfully processed {success_count} of {len(results)} devices")
