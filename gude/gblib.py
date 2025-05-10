@@ -12,6 +12,8 @@ def print_progress_bar(iteration, total, decimals=1, length=None, fill='█', cl
     if stdout.isatty():
         if length is None:
             length = get_terminal_size().columns - len(f"100.0%   {total}/{total} " + unit)
+        if iteration == 0:
+            iteration = 1
         percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
         if iteration == total:
             filled_length = length
