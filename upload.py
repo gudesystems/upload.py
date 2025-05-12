@@ -5,6 +5,7 @@ from argparse import ArgumentParser, Namespace
 import os
 import ipaddress
 from socket import gaierror
+from requests import get as req_get
 from requests.exceptions import Timeout, HTTPError, RequestException
 from typing import Tuple, Optional, List
 from dataclasses import dataclass
@@ -20,6 +21,55 @@ import logging
 logging.basicConfig(format='%(asctime)s %(name)-18s %(levelname)-8s %(message)s')
 log = logging.getLogger(__name__)  # custom logger name can be set
 log.setLevel(logging.getLevelName('DEBUG'))
+
+BASE_URL = "https://files.gude-systems.com/fw"
+def fetch_latest_fw_infos(base_url: str   = BASE_URL) -> ConfigParser:
+    """
+    Return a ready-to-use ConfigParser whose layout matches
+
+        [url]
+        basepath = https://files.gude-systems.com/fw
+
+        [enc2111]
+        subpath      = gude
+        json         = firmware-enc2111.json
+        version      = 1.7.1
+        filename     = firmware-enc2111_v{version}.bin
+        date         = 14.01.2025
+        size         = 1.1 MB
+        version_list = 1.7.1, 1.7.0, 1.6.1, …
+
+    The `version_list` is stored as a single comma-separated string, because
+    the INI format has no native list type.
+    """
+    # --- download & decode --------------------------------------------------
+    log.debug(f"Reading {base_url} ...")
+    payload: list[dict] = req_get(base_url, timeout=30).json()
+
+    # --- build config -------------------------------------------------------
+    cfg = ConfigParser()
+    cfg["url"] = {"basepath": base_url}
+
+    for entry in payload:
+        if entry["rev"] and entry["rev"] == 2:
+            section = f"{entry['model']}R{entry["rev"]}"  # e.g. "8031R2"
+        else:
+            section = f"{entry['model']}"  # e.g. "2111"
+        cfg[section] = {
+            "subpath":  entry["subpath"],
+            "json":     entry["json"],
+            "filename": entry["filename"],
+            "type":     entry["type"],
+            "model":    entry["model"],
+            "rev":      entry["rev"],
+            "version":  entry["version"],
+            "date":     entry["date"],
+            "size":     entry["size"],
+            # keep the list – flattened into one string
+            "version_list": ", ".join(entry["version_list"]),
+        }
+
+    return cfg
 
 
 def add_devices_to_config(_args: Namespace, _config: ConfigParser) -> ConfigParser:
@@ -116,10 +166,12 @@ def parse_args() -> Tuple[Namespace, ConfigParser, ConfigParser, str]:
          log.debug(f"Found {len(bin_infos)} binaries in {_args.search_folder} ...")
          unique_bin_infos = file_search.get_unique_devices(bin_infos)
          _firmware = file_search.get_config(unique_bin_infos, config=_firmware)
+    elif _args.onlineupdate:
+        _firmware = fetch_latest_fw_infos()
     else:
         log.debug(f"Reading {os.path.join(_config['defaults']['fwdir'], _args.version_ini)} ...")
         _firmware.read(os.path.join(_config['defaults']['fwdir'], _args.version_ini))
-    log.debug("Getting my IP (for GBL/UDP search ...")
+    log.debug("Getting my IP (for GBL/UDP search) ...")
     _my_ip = _config['defaults']['myIp'] if 'myIp' in _config['defaults'] else '0.0.0.0'
 
     return _args, _config, _firmware, _my_ip
@@ -248,13 +300,17 @@ def iterate_list(_ip_list: list, _firmware: ConfigParser, _config: ConfigParser,
             log.debug(f"Processing device: {ip}")
             dev_ip_for_conn = ip # Default
             # Handle potential port in IP string (though generate_ip_list should give clean IPs)
-            if isinstance(ip, str) and ':' in ip and not ipaddress.ip_address(ip.split(':')[0]).is_global: # Basic check for IP:port
-                 # This case might be less common if generate_ip_list cleans IPs
-                 parts = ip.split(':')
-                 if len(parts) == 2: # Assuming simple IP:port, not IPv6 with port yet
-                     dev_ip_for_conn = parts[0]
-                     # Port handling would be more complex here if needed for DeployDev directly
-                     # For now, DeployDev gets port from config
+            if isinstance(ip, str) and ':' in ip:
+                parts = ip.split(':')
+                dev_ip_for_conn = parts[0]
+                # Check if we're dealing with a hostname or IP
+                try:
+                    # Only validate if it looks like an IP address
+                    if re.match(r'^[\d\.]+$', dev_ip_for_conn):
+                        ipaddress.ip_address(dev_ip_for_conn)
+                except ValueError:
+                    # This is likely a hostname with port, which is fine
+                    log.debug(f"Treating {dev_ip_for_conn} as hostname with port {parts[1]}")
 
             dev = DeployDev(dev_ip_for_conn, req_headers=_args.header)
 

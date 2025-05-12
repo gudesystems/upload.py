@@ -70,7 +70,37 @@ There are two options to set individual commands either via **Command Line Param
 | `--version_ini`  | `version.ini` | use alternative filename instead of fw/version.ini
 | `--onlineupdate` |               | use online version info and download binary files
 | `--iprange`      |               | add host / net to upload.ini's [host] section
-| `--configip`     |               | if deploying a single device config, IP might change to this IP by config import 
+| `--configip`     |               | if deploying a single device config, IP might change to this IP by config import
+| `-s`, `--search_folder` |        | recursively search specified folder for compatible firmware binary files
+| `-r`, `--repl_prod_id` | `{'2110': '2111'}` | replace product IDs to avoid naming conflicts in firmware updates
+| `-d`, `--devices`|               | overwrite upload.ini settings with JSON formatted device configuration
+| `-H`, `--header` |               | set custom HTTP headers as JSON formatted string
+
+# Advanced Usage
+
+## Device Configuration Without upload.ini
+
+With the new `-d` or `--devices` parameter, you can specify device configuration directly in JSON format without needing an upload.ini file:
+
+```
+python upload.py --devices "{\"httpDefaults\":{\"username\":\"admin\",\"password\":\"admin\"}}"
+```
+
+To completely avoid using upload.ini, specify a non-existent file with `--upload_ini`.
+
+## Firmware Search and Selection
+
+The script now offers more options for finding and selecting firmware:
+
+- Use `-s` or `--search_folder` to recursively search a specified folder for compatible binary files. The script will find files following the same naming convention as web downloads and automatically create a version.ini style configuration.
+
+- The `-r` or `--repl_prod_id` parameter allows replacing product IDs to handle naming conflicts when finding suitable firmware updates. This is a specialized option and shouldn't normally need modification.
+
+- Enhanced `--onlineupdate` now fetches the complete version.ini file from the web, making the `-v` parameter and local version.ini file optional in this mode.
+
+## Device Processing Summary
+
+Upon completion, the script now provides a "Device Processing Summary" that gives clear feedback on the status of each device update operation.
 
 # HTTPS / Authentication
 - `upload.py` is using HTTP to upload config and firmware

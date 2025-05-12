@@ -1,4 +1,9 @@
 fw/*.bin
+*.xlsx
+*.bak
+*.png
+test*.py
+test*.ini
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -129,3 +134,13 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+24-11-20_log.txt
+error_25.05.23.txt
+test.ini
+.vscode/launch.json
+tests/mac_finder.py
+gude/_unnecessary_work.py
+gude/version.offline.ini
+.idea/
+pf.py
+pf.bak.py

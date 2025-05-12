@@ -82,7 +82,11 @@ class DeployDev(HttpDevice):
 
         if online_update:
             # check online JSON for latest version
-            url = f"{cfg['url']['basepath']}/{cfg[prodid]['json']}"
+            # check if subpath is used
+            if cfg.has_option(prodid, 'subpath'):
+                url = f"{cfg['url']['basepath']}/{cfg[prodid]['subpath']}/{cfg[prodid]['json']}"
+            else:
+                url = f"{cfg['url']['basepath']}/{cfg[prodid]['json']}"
             log.info(f"downloading {url}")
             latest_version = requests.get(url).json()[0]['version']
         else:
@@ -114,7 +118,10 @@ class DeployDev(HttpDevice):
         if not os.path.isfile(local_filename):
             if online_update:
                 # download latest firmware
-                url = f"{cfg['url']['basepath']}/{fw_filename}"
+                if cfg.has_option(prodid, 'subpath'):
+                    url = f"{cfg['url']['basepath']}/{cfg[prodid]['subpath']}/{fw_filename}"
+                else:
+                    url = f"{cfg['url']['basepath']}/{fw_filename}"
                 log.info(f"downloading {url}")
                 r = requests.get(url)
                 if r.status_code == 200:
