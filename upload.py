@@ -140,16 +140,26 @@ def parse_args() -> Tuple[Namespace, ConfigParser, ConfigParser, str]:
     parser.add_argument('-v', '--version_ini', help='fw version defs', default='version.ini')
     parser.add_argument('-o', '--onlineupdate', help='use online update files', action="store_true", default=False)
     parser.add_argument('-i', '--iprange', nargs="+",  help='range of ip address to manage')
-    parser.add_argument('-s', '--search_folder', help='folder to search for binary')
+    parser.add_argument('-sf', '--search_folder', help='folder to search for binary')
     parser.add_argument('-r', '--repl_prod_id', help='product ids to replace', default={'2110': '2111'}) # , '8221': '822x', '8226': '822x'
     parser.add_argument('-d', '--devices', help="overwrites upload.ini like {'httpDefaults': {'port'=80, 'ssl'=0, 'auth'=0, 'username'='','password'=''} }", default=None, type=json.loads)
     # -d "{\"httpDefaults\":{\"username\":\"admin\",\"password\":\"admin\"}}"
     parser.add_argument('-H', '--header', help='Setting custom http header like \'{"Connection": "close"}\'', default=None, type=json.loads)
+    parser.add_argument('-S', '--status', help='Only fetch device status without making any changes', action="store_true", default=False)
+    parser.add_argument('-G', '--gbl', help='Use GBL broadcast', action="store_true", default=True)
     _args = parser.parse_args()
 
     log.debug(f"Reading {_args.upload_ini} ...")
     _config = ConfigParser(strict=False)
     _config.read(_args.upload_ini)
+
+    if _args.gbl:
+        log.debug(f"Detected GBL search flag, adding to config ...")
+        if not _args.devices:
+            _args.devices = {}
+        if not 'hosts' in _args.devices:
+            _args.devices['hosts'] = {}
+        _args.devices['hosts'].update({'gbl':'search'})
 
     _config = add_devices_to_config(_args, _config)
 
@@ -267,6 +277,7 @@ class DeviceResult:
     product_name: str
     mac: str
     initial_firmware: str
+    latest_known_firmware: Optional[str] = None
     final_firmware: Optional[str] = None
     firmware_status: str = "not attempted"
     firmware_upload_notes: Optional[str] = None
@@ -432,15 +443,27 @@ def iterate_list(_ip_list: list, _firmware: ConfigParser, _config: ConfigParser,
             # update device_data and log
             if selected_prod_id:
                 device_data["prodid"] = selected_prod_id # Update prodid for update_firmware call
+                if selected_prod_id in _firmware:
+                    result.latest_known_firmware = f"{_firmware[selected_prod_id]['version']} ({_firmware[selected_prod_id]['date']}, {_firmware[selected_prod_id]['size']})"
+                else:
+                    result.latest_known_firmware = "unknown"
                 log.info(
                     f"{device_data['product_name']} "
                     f"({actual_prod_id} -> {selected_prod_id}, {mac}) at {ip}\n"
                     + " " * (len(f"{device_data['product_name']} ({actual_prod_id} -> {selected_prod_id}, {mac}) at {ip}") - len(f"running Firmware v{device_data['firm_v']}")) # Align logging
-                    + f"running Firmware v{device_data['firm_v']}"
+                    + f"running Firmware v{device_data['firm_v']}, latest known: {result.latest_known_firmware}"
                 )
             else:
                 log.warning(f"No firmware entry found for product '{actual_prod_id}' (original) or suitable replacement.")
                 result.firmware_status = f"No firmware definition for {actual_prod_id}"
+
+            # continue here for status
+            if _args.status:
+                result.firmware_status = "status only, no changes made"
+                result.success = False
+                results.append(result)
+                continue
+
             # deploy Firmware
             if selected_prod_id and selected_prod_id in _firmware: # Check if selected_prod_id is valid for _firmware
                 try:
@@ -554,15 +577,28 @@ if __name__ == "__main__": # Ensure this runs only when script is executed direc
 
     log.info("\nDevice Processing Summary:")
     log.info("-" * 80)
-    for res_item in processing_results: # Renamed result to res_item to avoid conflict
+    for res_item in processing_results:
         status_char = "✓" if res_item.success else "✗"
-        log.info(f"{status_char} Device {res_item.ip} ({res_item.product_name}, MAC: {res_item.mac})")
-        log.info(f"   Initial FW: {res_item.initial_firmware}, Final FW: {res_item.final_firmware if res_item.final_firmware else 'N/A'}")
-        log.info(f"   Firmware Status: {res_item.firmware_status}")
+        device_info = [
+            f"{status_char} Device {res_item.ip}",
+            f"Product: {res_item.product_name}",
+            f"MAC: {res_item.mac}",
+            f"Initial FW: {res_item.initial_firmware}",
+            f"Latest known FW: {res_item.latest_known_firmware}"
+        ]
+        
+        if res_item.final_firmware and res_item.final_firmware != res_item.initial_firmware:
+            device_info.append(f"Final FW: {res_item.final_firmware}")
+            
+        log.info(", ".join(device_info))
+        
+        if res_item.firmware_status:
+            log.info(f"   Status: {res_item.firmware_status}")
         if res_item.firmware_upload_notes:
-            log.info(f"     Upload Notes: {res_item.firmware_upload_notes}")
+            log.info(f"   Notes: {res_item.firmware_upload_notes}")
         if res_item.error_message:
             log.info(f"   Error: {res_item.error_message}")
+    
     log.info("-" * 80)
     success_count = sum(1 for r_item in processing_results if r_item.success)
     log.info(f"Successfully processed {success_count} of {len(processing_results)} devices (based on overall success flag).")
