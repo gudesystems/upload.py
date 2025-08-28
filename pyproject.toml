@@ -1,0 +1,86 @@
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gude-upload-tool"
+version = "0.0.1"
+description = "A tool to automatically deploy firmware updates, configuration, and SSL certificates to Gude Systems GmbH PDU devices"
+readme = "README.md"
+requires-python = ">=3.7"
+license = {text = "Proprietary"}
+authors = [
+    {name = "Gude Systems GmbH"}
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: System Administrators",
+    "Programming Language :: Python :: 3",
+    # removed 3.6 due to typing usage and dataclasses
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Topic :: System :: Networking",
+    "Topic :: System :: Systems Administration",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "requests>=2.25.0",
+    "ipaddress;python_version<'3.7'",  # built-in for Python 3.7+
+]
+
+[project.urls]
+"Homepage" = "https://www.gude-systems.com"
+"Bug Tracker" = "https://github.com/gudesystems/upload.py/issues"
+
+[project.scripts]
+gude-upload = "upload:main"
+
+[tool.setuptools]
+packages = ["gude"]
+py-modules = ["upload"]
+
+
+[tool.black]
+line-length = 100
+target-version = ["py37", "py38", "py39", "py310"]
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.mypy]
+python_version = "3.7"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+
+[tool.pytest]
+testpaths = ["tests"]
+python_files = "test_*.py"
+
+[project.optional-dependencies]
+dev = [
+    "black",
+    "isort",
+    "mypy",
+    "pylint",
+    "pytest",
+    "pytest-cov",
+]
+
+[tool.pylint.messages_control]
+disable = [
+    "missing-docstring",
+    "invalid-name",
+]
+
+[tool.pylint.format]
+max-line-length = 100
+
+[tool.coverage.run]
+source = ["gude"]
+omit = ["tests/*"]

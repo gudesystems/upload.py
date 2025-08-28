@@ -1,13 +1,14 @@
 #!/usr/bin/python3
 
 from configparser import ConfigParser
+from datetime import date
 from argparse import ArgumentParser, Namespace
 import os
 import ipaddress
 from socket import gaierror
 from requests import get as req_get
 from requests.exceptions import Timeout, HTTPError, RequestException
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, List, Dict, Any
 from dataclasses import dataclass
 
 from gude.deployDev import DeployDev
@@ -44,11 +45,11 @@ def fetch_latest_fw_infos(base_url: str   = BASE_URL) -> ConfigParser:
     """
     # --- download & decode --------------------------------------------------
     log.debug(f"Reading {base_url} ...")
-    payload: list[dict] = req_get(base_url, timeout=30).json()
+    payload: List[Dict[str, Any]] = req_get(base_url, timeout=30).json()
 
     # --- build config -------------------------------------------------------
     cfg = ConfigParser()
-    cfg["url"] = {"basepath": base_url}
+    cfg["url"] = {"basepath": base_url, "last_update": date.today().isoformat()}
 
     for entry in payload:
         if entry["rev"] and entry["rev"] == 2:
@@ -146,7 +147,7 @@ def parse_args() -> Tuple[Namespace, ConfigParser, ConfigParser, str]:
     # -d "{\"httpDefaults\":{\"username\":\"admin\",\"password\":\"admin\"}}"
     parser.add_argument('-H', '--header', help='Setting custom http header like \'{"Connection": "close"}\'', default=None, type=json.loads)
     parser.add_argument('-S', '--status', help='Only fetch device status without making any changes', action="store_true", default=False)
-    parser.add_argument('-G', '--gbl', help='Use GBL broadcast', action="store_true", default=True)
+    parser.add_argument('-G', '--gbl', help='Use GBL broadcast', action="store_true", default=False)
     _args = parser.parse_args()
 
     log.debug(f"Reading {_args.upload_ini} ...")
@@ -214,7 +215,7 @@ def add_iprange_to_config(_iprange: Optional[List[str]], _config: ConfigParser):
             raise KeyError("Missing required args, could not determine device!")
 
 
-def generate_ip_list(_hosts_config: ConfigParser, _my_ip: str, _gbl_timeout: float) -> list: # Changed _hosts to _hosts_config
+def generate_ip_list(_hosts_config: ConfigParser, _my_ip: str, _gbl_timeout: float) -> List[str]: # Changed _hosts to _hosts_config
     """
     Function that adds hosts from args to hosts in _config (parsed hosts from upload.ini)
     :param ConfigParser _hosts_config: ConfigParser section for hosts
@@ -285,7 +286,7 @@ class DeviceResult:
     error_message: Optional[str] = None
 
 
-def iterate_list(_ip_list: list, _firmware: ConfigParser, _config: ConfigParser, _args: object) -> list[DeviceResult]:
+def iterate_list(_ip_list: List[str], _firmware: ConfigParser, _config: ConfigParser, _args: object) -> List[DeviceResult]:
     """
     Function that iterates over all hosts from _ip_list hosts,
     matching corresponding firmware in _firmware,
@@ -444,7 +445,7 @@ def iterate_list(_ip_list: list, _firmware: ConfigParser, _config: ConfigParser,
             if selected_prod_id:
                 device_data["prodid"] = selected_prod_id # Update prodid for update_firmware call
                 if selected_prod_id in _firmware:
-                    result.latest_known_firmware = f"{_firmware[selected_prod_id]['version']} ({_firmware[selected_prod_id]['date']}, {_firmware[selected_prod_id]['size']})"
+                    result.latest_known_firmware = _firmware[selected_prod_id]['version']
                 else:
                     result.latest_known_firmware = "unknown"
                 log.info(
@@ -562,7 +563,7 @@ def configure_auth_settings(_config: ConfigParser) -> None:
             elif auth_val is None: # If username/password are empty and auth is not set at all
                  _config[section]['auth'] = '0' # Default to auth=0
 
-if __name__ == "__main__": # Ensure this runs only when script is executed directly
+def main() -> None:
     # get all args
     args, config, firmware, my_ip = parse_args()
 
@@ -580,17 +581,21 @@ if __name__ == "__main__": # Ensure this runs only when script is executed direc
     for res_item in processing_results:
         status_char = "✓" if res_item.success else "✗"
         device_info = [
-            f"{status_char} Device {res_item.ip}",
-            f"Product: {res_item.product_name}",
-            f"MAC: {res_item.mac}",
-            f"Initial FW: {res_item.initial_firmware}",
-            f"Latest known FW: {res_item.latest_known_firmware}"
+            f"{status_char} {res_item.ip}",
+            f"{res_item.product_name}",
+            f"{res_item.mac}"
         ]
+
+        device_fw = [f"{res_item.initial_firmware}(previous)"]
         
         if res_item.final_firmware and res_item.final_firmware != res_item.initial_firmware:
-            device_info.append(f"Final FW: {res_item.final_firmware}")
+            device_fw.append(f"{res_item.final_firmware}(current)")
+        else:
+            last_update = firmware["url"]["last_update"] if firmware.has_section("url") and firmware.has_option("url", "last_update") else "known"
+            device_fw.append(f"{res_item.latest_known_firmware}(latest {last_update})")
             
         log.info(", ".join(device_info))
+        log.info("   FW: "+", ".join(device_fw))
         
         if res_item.firmware_status:
             log.info(f"   Status: {res_item.firmware_status}")
@@ -602,3 +607,7 @@ if __name__ == "__main__": # Ensure this runs only when script is executed direc
     log.info("-" * 80)
     success_count = sum(1 for r_item in processing_results if r_item.success)
     log.info(f"Successfully processed {success_count} of {len(processing_results)} devices (based on overall success flag).")
+
+
+if __name__ == "__main__":  # Ensure this runs only when script is executed directly
+    main()
