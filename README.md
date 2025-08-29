@@ -9,7 +9,7 @@ Device configuration and ssl certificates, can be prepared beforehand.
 ## Requirements
 
 1. A `Python` capable device (e.g. PC).
-   1. Minimum required: `Python Version 3.6`
+   1. Minimum required: `Python Version 3.7`
    2. This Script is using `requests` python module
 2. A **Gude Systems GmbH PDU device**
 
