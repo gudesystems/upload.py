@@ -125,6 +125,13 @@ class DeployDev(HttpDevice):
                 log.info(f"downloading {url}")
                 r = requests.get(url)
                 if r.status_code == 200:
+                    # ensure target directory exists before writing the file
+                    target_dir = os.path.dirname(local_filename)
+                    if target_dir:
+                        try:
+                            os.makedirs(target_dir, exist_ok=True)
+                        except Exception as e:
+                            raise ValueError(f"Could not create firmware directory '{target_dir}': {e}")
                     with open(local_filename, 'wb') as fwfile:
                         fwfile.write(r.content)
                 else:
