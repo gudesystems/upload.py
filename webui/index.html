@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gude Devices</title>
+  <link href="/assets/theme.min.css" rel="stylesheet" />
+  <link href="/assets/user.min.css" rel="stylesheet" />
+  <link href="/assets/dataTables.bootstrap5.min.css" rel="stylesheet" />
+  <style>
+    body { padding: 16px; }
+    .topbar { display:flex; align-items:center; justify-content:space-between; margin-bottom: 12px; }
+    .brand { display:flex; align-items:center; gap:12px; font-weight:600; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">
+      <div class="logo" style="width:148px;height:32px;background-size:contain;background-repeat:no-repeat;"></div>
+      <span>Devices</span>
+    </div>
+    <div>
+      <button id="runBtn" class="btn btn-primary">GBL Query</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <table id="devicesTable" class="table table-striped" style="width:100%">
+        <thead>
+          <tr>
+            <th>Status</th>
+            <th>IP</th>
+            <th>Product</th>
+            <th>MAC</th>
+            <th>Firmware</th>
+            <th>Notes</th>
+            <th>Error</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script src="/assets/jquery.min.js"></script>
+  <script src="/assets/popper.min.js"></script>
+  <script src="/assets/bootstrap.min.js"></script>
+  <script src="/assets/jquery.dataTables.min.js"></script>
+  <script src="/assets/dataTables.bootstrap5.min.js"></script>
+  <script>
+    let table;
+    const firmwareText = (r) => {
+      const parts = [];
+      if (r.initial_firmware) parts.push(`${r.initial_firmware} (previous)`);
+      if (r.final_firmware && r.final_firmware !== r.initial_firmware) {
+        parts.push(`${r.final_firmware} (current)`);
+      } else if (r.latest_known_firmware) {
+        parts.push(`${r.latest_known_firmware} (latest)`);
+      }
+      return parts.join(', ');
+    };
+
+    function render(results) {
+      const rows = results.map(r => ([
+        r.success ? '✓' : '✗',
+        r.ip || '',
+        r.product_name || '',
+        (r.mac || '').replace(/_/g, ':'),
+        firmwareText(r),
+        r.firmware_status || r.firmware_upload_notes || '',
+        r.error_message || ''
+      ]));
+      if (!table) {
+        table = new $.fn.dataTable.Api($('#devicesTable').DataTable({
+          data: rows,
+          columns: [
+            { title: 'Status' },
+            { title: 'IP' },
+            { title: 'Product' },
+            { title: 'MAC' },
+            { title: 'Firmware' },
+            { title: 'Notes' },
+            { title: 'Error' }
+          ],
+          pageLength: 10
+        }));
+      } else {
+        table.clear();
+        table.rows.add(rows);
+        table.draw(false);
+      }
+    }
+
+    async function fetchDevices() {
+      const res = await fetch('/api/devices');
+      const data = await res.json();
+      render(data.results || []);
+      return data.running;
+    }
+
+    async function runQuery() {
+      try {
+        document.getElementById('runBtn').disabled = true;
+        await fetch('/api/run');
+        // Poll until done
+        let running = true;
+        while (running) {
+          running = await fetchDevices();
+          await new Promise(r => setTimeout(r, 1500));
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        document.getElementById('runBtn').disabled = false;
+      }
+    }
+
+    document.getElementById('runBtn').addEventListener('click', runQuery);
+    // Initial load
+    fetchDevices();
+  </script>
+</body>
+</html>
+

@@ -609,5 +609,87 @@ def main() -> None:
     log.info(f"Successfully processed {success_count} of {len(processing_results)} devices (based on overall success flag).")
 
 
+def run_processing_from_options(
+    *,
+    upload_ini: str = 'upload.ini',
+    version_ini: str = 'version.ini',
+    onlineupdate: bool = False,
+    iprange: Optional[List[str]] = None,
+    search_folder: Optional[str] = None,
+    header: Optional[Dict[str, str]] = None,
+    status: bool = False,
+    gbl: bool = False,
+    devices: Optional[Dict[str, Any]] = None,
+    forcefw: bool = False,
+    repl_prod_id: Optional[Dict[str, str]] = None,
+    configip: Optional[str] = None,
+) -> List[DeviceResult]:
+    """
+    Programmatic entry-point to run the processing without CLI.
+
+    Returns a list of DeviceResult for consumption by a web UI or API.
+    """
+    # Build a pseudo-args namespace compatible with iterate_list expectations
+    args = Namespace()
+    args.configip = configip
+    args.forcefw = forcefw
+    args.upload_ini = upload_ini
+    args.version_ini = version_ini
+    args.onlineupdate = onlineupdate
+    args.iprange = iprange
+    args.search_folder = search_folder
+    args.repl_prod_id = repl_prod_id or {'2110': '2111'}
+    args.devices = devices
+    args.header = header
+    args.status = status
+    args.gbl = gbl
+
+    # Read upload.ini
+    log.debug(f"[web] Reading {args.upload_ini} ...")
+    config = ConfigParser(strict=False)
+    config.read(args.upload_ini)
+
+    # Handle GBL flag similar to CLI path
+    if args.gbl:
+        log.debug("[web] Detected GBL search flag, adding to config ...")
+        if not args.devices:
+            args.devices = {}
+        if 'hosts' not in args.devices:
+            args.devices['hosts'] = {}
+        args.devices['hosts'].update({'gbl': 'search'})
+
+    # Merge device overrides
+    config = add_devices_to_config(args, config)
+
+    # Configure authentication defaults
+    configure_auth_settings(config)
+
+    # Apply global defaults
+    for section, settings in DEFAULT_SETTINGS.items():
+        set_config_defaults(config, section, settings)
+
+    # Prepare firmware database
+    firmware = ConfigParser(strict=False)
+    if args.search_folder is not None and os.path.isdir(args.search_folder):
+        log.debug(f"[web] Searching for binaries in {args.search_folder} ...")
+        bin_infos = file_search.rekursive_search(args.search_folder)
+        unique_bin_infos = file_search.get_unique_devices(bin_infos)
+        firmware = file_search.get_config(unique_bin_infos, config=firmware)
+    elif args.onlineupdate:
+        firmware = fetch_latest_fw_infos()
+    else:
+        log.debug(f"[web] Reading {os.path.join(config['defaults']['fwdir'], args.version_ini)} ...")
+        firmware.read(os.path.join(config['defaults']['fwdir'], args.version_ini))
+
+    # Determine own IP for GBL/UDP search
+    my_ip = config['defaults']['myIp'] if 'myIp' in config['defaults'] else '0.0.0.0'
+
+    # Build IP list and run processing
+    add_iprange_to_config(args.iprange, config)
+    ip_list = generate_ip_list(config, my_ip, float(config.get('defaults', 'gblTimeout', fallback=1.0)))
+    results = iterate_list(ip_list, firmware, config, args)
+    return results
+
+
 if __name__ == "__main__":  # Ensure this runs only when script is executed directly
     main()

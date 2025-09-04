@@ -1,0 +1,153 @@
+import json
+import os
+import sys
+import threading
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
+from urllib.parse import urlparse
+from dataclasses import asdict, is_dataclass
+from pathlib import Path
+from typing import Optional, List
+
+# Ensure repository root is on sys.path so we can import upload.py when running this file directly
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from upload import run_processing_from_options, DeviceResult
+
+
+class State:
+    running: bool = False
+    results: List[DeviceResult] = []
+
+
+def find_assets_dir() -> Optional[str]:
+    # Prefer project root/GudeNWTabelle regardless of current working directory
+    base = os.path.join(str(ROOT), 'GudeNWTabelle')
+    if not os.path.isdir(base):
+        return None
+    for name in os.listdir(base):
+        if name.endswith('_files') and os.path.isdir(os.path.join(base, name)):
+            return os.path.join(base, name)
+    return None
+
+
+ASSETS_DIR = find_assets_dir()
+
+
+def _json_default(obj):
+    if is_dataclass(obj):
+        return asdict(obj)
+    return str(obj)
+
+
+def _run_gbl_query_async():
+    try:
+        State.running = True
+        State.results = run_processing_from_options(
+            gbl=True,
+            status=True,
+            onlineupdate=True,
+            upload_ini="None",
+            version_ini="None"
+        )
+    finally:
+        State.running = False
+
+
+class Handler(BaseHTTPRequestHandler):
+    def _send(self, code=200, headers=None):
+        self.send_response(code)
+        if headers:
+            for k, v in headers.items():
+                self.send_header(k, v)
+        self.end_headers()
+
+    def do_GET(self):
+        parsed = urlparse(self.path)
+        path = parsed.path
+        if path == '/' or path == '/index.html':
+            return self._serve_index()
+        if path.startswith('/assets/'):
+            return self._serve_asset(path[len('/assets/'):])
+        if path == '/api/devices':
+            return self._api_devices()
+        if path == '/api/run':
+            return self._api_run()
+        self._send(404, {"Content-Type": "text/plain; charset=utf-8"})
+        self.wfile.write(b'Not Found')
+
+    def _serve_index(self):
+        index_path = os.path.join(os.path.dirname(__file__), 'index.html')
+        try:
+            with open(index_path, 'rb') as f:
+                data = f.read()
+            self._send(200, {"Content-Type": "text/html; charset=utf-8"})
+            self.wfile.write(data)
+        except FileNotFoundError:
+            self._send(500, {"Content-Type": "text/plain; charset=utf-8"})
+            self.wfile.write(b'index.html not found')
+
+    def _serve_asset(self, name: str):
+        if not ASSETS_DIR:
+            self._send(404, {"Content-Type": "text/plain; charset=utf-8"})
+            self.wfile.write(b'Assets directory not found')
+            return
+        safe_name = os.path.basename(name)
+        path = os.path.join(ASSETS_DIR, safe_name)
+        if not os.path.isfile(path):
+            self._send(404, {"Content-Type": "text/plain; charset=utf-8"})
+            self.wfile.write(b'Asset not found')
+            return
+        ext = os.path.splitext(path)[1].lower()
+        ctype = {
+            '.css': 'text/css',
+            '.js': 'application/javascript',
+            '.png': 'image/png',
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.svg': 'image/svg+xml',
+        }.get(ext, 'application/octet-stream')
+        with open(path, 'rb') as f:
+            data = f.read()
+        self._send(200, {"Content-Type": f"{ctype}; charset=utf-8" if ctype.startswith(('text/', 'application/javascript')) else ctype})
+        self.wfile.write(data)
+
+    def _api_devices(self):
+        payload = {
+            'running': State.running,
+            'results': [asdict(r) for r in State.results],
+        }
+        data = json.dumps(payload, default=_json_default).encode('utf-8')
+        self._send(200, {"Content-Type": "application/json; charset=utf-8"})
+        self.wfile.write(data)
+
+    def _api_run(self):
+        if State.running:
+            # Already running; report accepted
+            payload = {'running': True}
+            data = json.dumps(payload).encode('utf-8')
+            self._send(200, {"Content-Type": "application/json; charset=utf-8"})
+            self.wfile.write(data)
+            return
+        t = threading.Thread(target=_run_gbl_query_async, daemon=True)
+        t.start()
+        payload = {'running': True}
+        data = json.dumps(payload).encode('utf-8')
+        self._send(202, {"Content-Type": "application/json; charset=utf-8"})
+        self.wfile.write(data)
+
+
+def serve(host: str = '0.0.0.0', port: int = 8000):
+    httpd = ThreadingHTTPServer((host, port), Handler)
+    print(f"Web UI available at http://{host}:{port}")
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        httpd.server_close()
+
+
+if __name__ == '__main__':
+    serve()
