@@ -95,10 +95,20 @@ class Handler(BaseHTTPRequestHandler):
             return
         safe_name = os.path.basename(name)
         path = os.path.join(ASSETS_DIR, safe_name)
+        # Allow serving of a project-root logo if requested
         if not os.path.isfile(path):
-            self._send(404, {"Content-Type": "text/plain; charset=utf-8"})
-            self.wfile.write(b'Asset not found')
-            return
+            if safe_name == 'gude_only-logo.svg':
+                alt = os.path.join(str(ROOT), 'gude_only-logo.svg')
+                if os.path.isfile(alt):
+                    path = alt
+                else:
+                    self._send(404, {"Content-Type": "text/plain; charset=utf-8"})
+                    self.wfile.write(b'Asset not found')
+                    return
+            else:
+                self._send(404, {"Content-Type": "text/plain; charset=utf-8"})
+                self.wfile.write(b'Asset not found')
+                return
         ext = os.path.splitext(path)[1].lower()
         ctype = {
             '.css': 'text/css',

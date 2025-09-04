@@ -278,6 +278,11 @@ class DeviceResult:
     product_name: str
     mac: str
     initial_firmware: str
+    # Connection details for UI linking
+    conn_host: Optional[str] = None
+    conn_port: Optional[int] = None
+    conn_ssl: Optional[bool] = None
+    url: Optional[str] = None
     latest_known_firmware: Optional[str] = None
     final_firmware: Optional[str] = None
     firmware_status: str = "not attempted"
@@ -340,14 +345,23 @@ def iterate_list(_ip_list: List[str], _firmware: ConfigParser, _config: ConfigPa
 
             # Apply HTTP defaults using the generalized function
             set_config_defaults(_config, config_key, DEFAULT_SETTINGS['httpDefaults'])
-            # Now apply specific settings from the chosen config_key section
-            dev.set_http_port(int(_config.get(config_key, 'port', fallback=80)),
-                              _config.getboolean(config_key, 'ssl', fallback=False))
+            # Determine connection settings
+            port = int(_config.get(config_key, 'port', fallback=80))
+            use_ssl = _config.getboolean(config_key, 'ssl', fallback=False)
+            # Apply to device
+            dev.set_http_port(port, use_ssl)
             dev.set_basic_auth(_config.getboolean(config_key, 'auth', fallback=False),
                                _config.get(config_key, 'username', fallback=''),
                                _config.get(config_key, 'password', fallback=''))
             dev.set_http_timeout(float(_config.get('defaults', 'httpTimeout', fallback=3.0)))
             dev.set_http_retries(0)
+
+            # Expose connection info for UI
+            result.conn_host = dev_ip_for_conn
+            result.conn_port = port
+            result.conn_ssl = use_ssl
+            proto = 'https' if use_ssl else 'http'
+            result.url = f"{proto}://{dev_ip_for_conn}:{port}"
             
             try:
                 device_data = dev.http_get_status_json(DeployDev.JSON_STATUS_MISC)['misc']
