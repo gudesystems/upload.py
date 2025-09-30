@@ -22,17 +22,13 @@ class State:
 
 
 def find_assets_dir() -> Optional[str]:
-    # Prefer project root/GudeNWTabelle regardless of current working directory
-    base = os.path.join(str(ROOT), 'GudeNWTabelle')
-    if not os.path.isdir(base):
-        return None
-    for name in os.listdir(base):
-        if name.endswith('_files') and os.path.isdir(os.path.join(base, name)):
-            return os.path.join(base, name)
+    # Deprecated: previously auto-detected from exported HTML folders
+    # Kept for reference; no longer used.
     return None
 
 
-ASSETS_DIR = find_assets_dir()
+# Hardcode assets folder next to index.html
+ASSETS_DIR = os.path.join(os.path.dirname(__file__), 'assets')
 
 
 def _json_default(obj):
