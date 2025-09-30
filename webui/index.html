@@ -14,6 +14,26 @@
     .logo{background-image:url('/assets/gude_only-logo.svg');background-repeat:no-repeat;background-position:left center;background-size:contain;}
     .nav-link-icon svg { width: 18px; height: 18px; display: inline-block; }
     html.navbar-vertical-collapsed .sidebar-meta { display: none !important; }
+    /* Align DataTables filter row content and unify control heights */
+    div.dataTables_wrapper div.dataTables_filter {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: .5rem; /* even spacing between input and buttons */
+    }
+    div.dataTables_wrapper div.dataTables_filter label { margin: 0; }
+    /* Match button height to search input for visual alignment */
+    div.dataTables_wrapper div.dataTables_filter input[type="search"] {
+      height: 32px;
+    }
+    .dt-toolbar-btn {
+      height: 32px;
+      padding: .125rem .5rem; /* tight vertical, comfy horizontal */
+      display: inline-flex;
+      align-items: center;
+      white-space: nowrap; /* prevent label wrapping */
+      flex: 0 0 auto; /* do not shrink and force line-breaks */
+    }
   </style>
 </head>
 <body>
@@ -93,9 +113,6 @@
         <div class="card mb-3">
           <div class="card-header d-flex flex-between-center">
             <h5 class="mb-0">Devices</h5>
-            <div class="d-flex align-items-center gap-2">
-              <button id="runBtn" class="btn btn-primary">GBL Query</button>
-            </div>
           </div>
           <div class="bg-body-tertiary p-3 rounded-bottom-2">
             <div class="table-responsive">
@@ -191,6 +208,46 @@
           ],
           pageLength: 10
         }));
+        // Inject action buttons next to the DataTables search input
+        (function ensureToolbarButtons(){
+          if (document.getElementById('refreshBtn')) return; // already added
+          var filter = document.querySelector('#devicesTable_wrapper .dataTables_filter');
+          if (!filter) return;
+          // Find Devices button (leftmost)
+          var searchBtn = document.createElement('button');
+          searchBtn.id = 'findBtn';
+          searchBtn.type = 'button';
+          searchBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn';
+          searchBtn.setAttribute('data-bs-toggle','tooltip');
+          searchBtn.setAttribute('data-bs-placement','bottom');
+          searchBtn.setAttribute('data-bs-original-title','Find Devices');
+          searchBtn.innerHTML = '<svg class="fas svg-h-8 me-2" aria-hidden="true" focusable="false" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M505 442.7L405.3 343c28.4-34.9 45.7-79.5 45.7-128C451 96.5 354.5 0 231 0S11 96.5 11 215s96.5 215 220 215c48.5 0 93.1-17.3 128-45.7L442.7 505c9.4 9.4 24.6 9.4 33.9 0l28.3-28.3c9.5-9.4 9.5-24.6.1-33.9zM231 367c-83.7 0-152-68.3-152-152S147.3 63 231 63s152 68.3 152 152-68.3 152-152 152z"></path></svg>Find Devices';
+
+          // Refresh button (formerly GBL Query)
+          var runBtn = document.createElement('button');
+          runBtn.id = 'refreshBtn';
+          runBtn.type = 'button';
+          runBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn';
+          runBtn.setAttribute('data-bs-toggle','tooltip');
+          runBtn.setAttribute('data-bs-placement','bottom');
+          runBtn.setAttribute('data-bs-original-title','Refresh');
+          runBtn.innerHTML = '<svg class="fas svg-h-8 me-2" aria-hidden="true" focusable="false" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M370.72 133.28C339.458 104.008 298.888 87.962 255.848 88c-77.458.068-144.328 53.178-162.791 126.85-1.344 5.363-6.122 9.15-11.651 9.15H24.103c-7.498 0-13.194-6.807-11.807-14.176C33.933 94.924 134.813 8 256 8c66.448 0 126.791 26.136 171.315 68.685L463.03 40.97C478.149 25.851 504 36.559 504 57.941V192c0 13.255-10.745 24-24 24H345.941c-21.382 0-32.09-25.851-16.971-40.971l41.75-41.749zM32 296h134.059c21.382 0 32.09 25.851 16.971 40.971l-41.75 41.75c31.262 29.273 71.835 45.319 114.876 45.28 77.418-.07 144.315-53.144 162.787-126.849 1.344-5.363 6.122-9.15 11.651-9.15h57.304c7.498 0 13.194 6.807 11.807 14.176C478.067 417.076 377.187 504 256 504c-66.448 0-126.791-26.136-171.315-68.685L48.97 471.03C33.851 486.149 8 475.441 8 454.059V320c0-13.255 10.745-24 24-24z"></path></svg>Refresh';
+          var updBtn = document.createElement('button');
+          updBtn.id = 'updateBtn';
+          updBtn.type = 'button';
+          updBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn';
+          updBtn.setAttribute('data-bs-toggle','tooltip');
+          updBtn.setAttribute('data-bs-placement','bottom');
+          updBtn.setAttribute('data-bs-original-title','Update');
+          updBtn.innerHTML = '<svg class="fas svg-h-8 me-2" aria-hidden="true" focusable="false" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M255.545 8c-66.269.119-126.438 26.233-170.86 68.685L48.971 40.971C33.851 25.851 8 36.559 8 57.941V192c0 13.255 10.745 24 24 24h134.059c21.382 0 32.09-25.851 16.971-40.971l-41.75-41.75c30.864-28.899 70.801-44.907 113.23-45.273 92.398-.798 170.283 73.977 169.484 169.442C423.236 348.009 349.816 424 256 424c-41.127 0-79.997-14.678-110.63-41.556-4.743-4.161-11.906-3.908-16.368.553L89.34 422.659c-4.872 4.872-4.631 12.815.482 17.433C133.798 479.813 192.074 504 256 504c136.966 0 247.999-111.033 248-247.998C504.001 119.193 392.354 7.755 255.545 8z"></path></svg>Update';
+          filter.appendChild(searchBtn);
+          filter.appendChild(runBtn);
+          filter.appendChild(updBtn);
+          // Wire events (functions can be defined elsewhere)
+          searchBtn.addEventListener('click', function(){ /* TBD */ });
+          runBtn.addEventListener('click', runQuery);
+          updBtn.addEventListener('click', function(){ /* TBD */ });
+        })();
       } else {
         table.clear();
         table.rows.add(rows);
@@ -207,7 +264,7 @@
 
     async function runQuery() {
       try {
-        const btn = document.getElementById('runBtn');
+        const btn = document.getElementById('refreshBtn');
         btn.disabled = true;
         await fetch('/api/run');
         let running = true;
@@ -218,11 +275,11 @@
       } catch (e) {
         console.error(e);
       } finally {
-        document.getElementById('runBtn').disabled = false;
+        document.getElementById('refreshBtn').disabled = false;
       }
     }
 
-    document.getElementById('runBtn').addEventListener('click', runQuery);
+    // Buttons are injected next to the search input when the table initializes
     fetchDevices();
 
     // Vertical menu collapse/open with animation + persistence
