@@ -53,7 +53,7 @@ def fetch_latest_fw_infos(base_url: str   = BASE_URL) -> ConfigParser:
 
     for entry in payload:
         if entry["rev"] and entry["rev"] == 2:
-            section = f"{entry['model']}R{entry["rev"]}"  # e.g. "8031R2"
+            section = f"{entry['model']}R{entry['rev']}"  # e.g. "8031R2"
         else:
             section = f"{entry['model']}"  # e.g. "2111"
         cfg[section] = {
@@ -142,12 +142,13 @@ def parse_args() -> Tuple[Namespace, ConfigParser, ConfigParser, str]:
     parser.add_argument('-o', '--onlineupdate', help='use online update files', action="store_true", default=False)
     parser.add_argument('-i', '--iprange', nargs="+",  help='range of ip address to manage')
     parser.add_argument('-sf', '--search_folder', help='folder to search for binary')
-    parser.add_argument('-r', '--repl_prod_id', help='product ids to replace', default={'2110': '2111'}) # , '8221': '822x', '8226': '822x'
+    parser.add_argument('-r', '--repl_prod_id', help='product ids to replace', default={'2110': '2111', '8221': '822x', '8226': '822x'}) # , '8221': '822x', '8226': '822x'
     parser.add_argument('-d', '--devices', help="overwrites upload.ini like {'httpDefaults': {'port'=80, 'ssl'=0, 'auth'=0, 'username'='','password'=''} }", default=None, type=json.loads)
     # -d "{\"httpDefaults\":{\"username\":\"admin\",\"password\":\"admin\"}}"
     parser.add_argument('-H', '--header', help='Setting custom http header like \'{"Connection": "close"}\'', default=None, type=json.loads)
     parser.add_argument('-S', '--status', help='Only fetch device status without making any changes', action="store_true", default=False)
     parser.add_argument('-G', '--gbl', help='Use GBL broadcast', action="store_true", default=False)
+    parser.add_argument('-ng', '--nogbl', help='Dont use GBL', action="store_true", default=False)
     _args = parser.parse_args()
 
     log.debug(f"Reading {_args.upload_ini} ...")
@@ -315,6 +316,10 @@ def iterate_list(_ip_list: List[str], _firmware: ConfigParser, _config: ConfigPa
         
         try:
             log.debug(f"Processing device: {ip}")
+
+            #if ip not in ["gwtestnet1.gude.local:38221", "gwtestnet1.gude.local:38226"]:
+            #    continue
+
             dev_ip_for_conn = ip # Default
             # Handle potential port in IP string (though generate_ip_list should give clean IPs)
             if isinstance(ip, str) and ':' in ip:
@@ -392,19 +397,21 @@ def iterate_list(_ip_list: List[str], _firmware: ConfigParser, _config: ConfigPa
 
             gbl_error = False
             mac = "unknown-mac"
-            try:
-                log.info(f"Attempting to get MAC for {ip} via GBL/UDP...")
-                if not gbl.check_mac(str(dev_ip_for_conn)): # Use dev_ip_for_conn which should be clean IP
-                    log.warning(f"GBL Timeout (UDP port 50123) for {dev_ip_for_conn}")
+            # Respect optional args.nogbl; default to False when missing
+            if not getattr(_args, 'nogbl', False):
+                try:
+                    log.info(f"Attempting to get MAC for {ip} via GBL/UDP...")
+                    if not gbl.check_mac(str(dev_ip_for_conn)): # Use dev_ip_for_conn which should be clean IP
+                        log.warning(f"GBL Timeout (UDP port 50123) for {dev_ip_for_conn}")
+                        gbl_error = True
+                    else:
+                        # extract mac (bytes longer than 255 result in two hex values so b'\x192' results in 1*16+9 and 2*16+0)
+                        # this dec values need to be converted back to hex ('x') as string with the length 2 ('02')
+                        mac = '_'.join(f'{c:02x}' for c in gbl.dstMAC)
+                        log.info(f"Got MAC {mac} for {dev_ip_for_conn} via GBL.")
+                except (gaierror, ConnectionResetError, OSError) as e_gbl: # OSError for network unreachable
+                    log.warning(f"GBL MAC retrieval failed for {dev_ip_for_conn}: {e_gbl}")
                     gbl_error = True
-                else:
-                    # extract mac (bytes longer than 255 result in two hex values so b'\x192' results in 1*16+9 and 2*16+0)
-                    # this dec values need to be converted back to hex ('x') as string with the length 2 ('02')
-                    mac = '_'.join(f'{c:02x}' for c in gbl.dstMAC)
-                    log.info(f"Got MAC {mac} for {dev_ip_for_conn} via GBL.")
-            except (gaierror, ConnectionResetError, OSError) as e_gbl: # OSError for network unreachable
-                log.warning(f"GBL MAC retrieval failed for {dev_ip_for_conn}: {e_gbl}")
-                gbl_error = True
                 
             if gbl_error:
                 log.info(f"Falling back to HTTP(S) to get MAC for {dev_ip_for_conn}...")
@@ -426,17 +433,22 @@ def iterate_list(_ip_list: List[str], _firmware: ConfigParser, _config: ConfigPa
             # --- before logging/deploy ---
             actual_prod_id = device_data['prodid']
             selected_prod_id = None
+
             # 1) Try exact match on the original prodid
             if actual_prod_id in _firmware:
                 selected_prod_id = actual_prod_id
+
+            log.debug(f"{actual_prod_id} not found in {_firmware.sections()}")
             # 2) If no match yet, apply your replacement map
-            if not selected_prod_id:
+            if not selected_prod_id and _args.repl_prod_id:
                 repl_map_str_any = _args.repl_prod_id # This is already a dict due to type=json.loads
                 repl_map = repl_map_str_any if isinstance(repl_map_str_any, dict) else {}
 
                 if actual_prod_id in repl_map:
+                    log.debug(f"{actual_prod_id} found in {repl_map}")
                     candidate = repl_map[actual_prod_id]
                     if candidate in _firmware:
+                        log.debug(f"{actual_prod_id} to be replaced with {candidate} (based on provided mapping)")
                         selected_prod_id = candidate
             # 3) If still nothing, and prodid contains "xx", inject the real number from product_name
             if not selected_prod_id and "xx" in actual_prod_id:
@@ -657,6 +669,8 @@ def run_processing_from_options(
     args.header = header
     args.status = status
     args.gbl = gbl
+    # Keep parity with CLI: default to using GBL unless explicitly disabled
+    args.nogbl = False
 
     # Read upload.ini
     log.debug(f"[web] Reading {args.upload_ini} ...")
