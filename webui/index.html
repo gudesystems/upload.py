@@ -14,11 +14,14 @@
     .logo{background-image:url('/assets/gude_only-logo.svg');background-repeat:no-repeat;background-position:left center;background-size:contain;}
     .nav-link-icon svg { width: 18px; height: 18px; display: inline-block; }
     html.navbar-vertical-collapsed .sidebar-meta { display: none !important; }
+    /* Top/Bottom rows spacing and alignment */
+    .dataTables_wrapper .dt-top { margin-bottom: .75rem !important; }
+    .dataTables_wrapper .dt-bottom { margin-top: .75rem !important; align-items: center; }
     /* Align DataTables filter row content and unify control heights */
     div.dataTables_wrapper div.dataTables_filter {
       display: flex;
       align-items: center;
-      justify-content: flex-end;
+      justify-content: flex-start; /* filter on the left */
       gap: .5rem; /* even spacing between input and buttons */
     }
     div.dataTables_wrapper div.dataTables_filter label { margin: 0; }
@@ -34,6 +37,7 @@
       white-space: nowrap; /* prevent label wrapping */
       flex: 0 0 auto; /* do not shrink and force line-breaks */
     }
+    .dt-top-actions { display: flex; align-items: center; justify-content: flex-end; gap: .5rem; }
   </style>
 </head>
 <body>
@@ -206,13 +210,18 @@
             { title: 'Notes' },
             { title: 'Error' }
           ],
-          pageLength: 10
+          pageLength: 10,
+          // Layout: Top-left filter; bottom info (left), length (center), pagination (right)
+          dom: "<'row dt-top'<'col-sm-12 col-md-6'f><'col-sm-12 col-md-6 text-end dt-top-actions'>>" +
+               "t" +
+               "<'row dt-bottom'<'col-sm-12 col-md-4'i><'col-sm-12 col-md-4 text-center'l><'col-sm-12 col-md-4'p>>"
         }));
-        // Inject action buttons next to the DataTables search input
+        // Inject action buttons into top-right area (fallback to filter if needed)
         (function ensureToolbarButtons(){
           if (document.getElementById('refreshBtn')) return; // already added
-          var filter = document.querySelector('#devicesTable_wrapper .dataTables_filter');
-          if (!filter) return;
+          var container = document.querySelector('#devicesTable_wrapper .dt-top-actions') ||
+                          document.querySelector('#devicesTable_wrapper .dataTables_filter');
+          if (!container) return;
           // Find Devices button (leftmost)
           var searchBtn = document.createElement('button');
           searchBtn.id = 'findBtn';
@@ -240,9 +249,9 @@
           updBtn.setAttribute('data-bs-placement','bottom');
           updBtn.setAttribute('data-bs-original-title','Update');
           updBtn.innerHTML = '<svg class="fas svg-h-8 me-2" aria-hidden="true" focusable="false" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M255.545 8c-66.269.119-126.438 26.233-170.86 68.685L48.971 40.971C33.851 25.851 8 36.559 8 57.941V192c0 13.255 10.745 24 24 24h134.059c21.382 0 32.09-25.851 16.971-40.971l-41.75-41.75c30.864-28.899 70.801-44.907 113.23-45.273 92.398-.798 170.283 73.977 169.484 169.442C423.236 348.009 349.816 424 256 424c-41.127 0-79.997-14.678-110.63-41.556-4.743-4.161-11.906-3.908-16.368.553L89.34 422.659c-4.872 4.872-4.631 12.815.482 17.433C133.798 479.813 192.074 504 256 504c136.966 0 247.999-111.033 248-247.998C504.001 119.193 392.354 7.755 255.545 8z"></path></svg>Update';
-          filter.appendChild(searchBtn);
-          filter.appendChild(runBtn);
-          filter.appendChild(updBtn);
+          container.appendChild(searchBtn);
+          container.appendChild(runBtn);
+          container.appendChild(updBtn);
           // Wire events (functions can be defined elsewhere)
           searchBtn.addEventListener('click', function(){ /* TBD */ });
           runBtn.addEventListener('click', runQuery);
