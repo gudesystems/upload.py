@@ -123,6 +123,7 @@
               <table id="devicesTable" class="table table-striped mb-0">
                 <thead>
                   <tr>
+                    <th style="width:1%; text-align:center;"><input type="checkbox" id="selectAll" aria-label="Select all" /></th>
                     <th>Status</th>
                     <th>IP</th>
                     <th>Product</th>
@@ -177,6 +178,7 @@
       applyTheme(localStorage.getItem('theme') || 'light');
     })();
     let table;
+    const selectedKeys = new Set();
     const firmwareText = (r) => {
       const parts = [];
       if (r.initial_firmware) parts.push(`${r.initial_firmware} (previous)`);
@@ -188,20 +190,32 @@
       return parts.join(', ');
     };
 
+    function rowKey(r){
+      if (r.conn_host && r.conn_port) return `${r.conn_host}:${r.conn_port}`;
+      return r.ip || '';
+    }
+
     function render(results) {
-      const rows = results.map(r => ([
-        r.success ? '✓' : '✗',
-        r.url ? `<a href="${r.url}" target="_blank" rel="noopener">${r.conn_host}:${r.conn_port}</a>` : (r.ip || ''),
-        r.product_name || '',
-        (r.mac || '').replace(/_/g, ':'),
-        firmwareText(r),
-        r.firmware_status || r.firmware_upload_notes || '',
-        r.error_message || ''
-      ]));
+      const rows = results.map(r => {
+        const key = rowKey(r);
+        const checked = selectedKeys.has(key) ? 'checked' : '';
+        const checkbox = `<input type="checkbox" class="row-select" data-key="${key}" ${checked} />`;
+        return [
+          checkbox,
+          r.success ? '✓' : '✗',
+          r.url ? `<a href="${r.url}" target="_blank" rel="noopener">${r.conn_host}:${r.conn_port}</a>` : (r.ip || ''),
+          r.product_name || '',
+          (r.mac || '').replace(/_/g, ':'),
+          firmwareText(r),
+          r.firmware_status || r.firmware_upload_notes || '',
+          r.error_message || ''
+        ];
+      });
       if (!table) {
         table = new $.fn.dataTable.Api($('#devicesTable').DataTable({
           data: rows,
           columns: [
+            { title: '<div class="form-check mb-0"><input class="form-check-input" id="selectAllHead" type="checkbox" aria-label="Select all" /></div>', orderable: false, searchable: false, className: 'text-center', width: '1%' },
             { title: 'Status' },
             { title: 'IP' },
             { title: 'Product' },
@@ -216,6 +230,53 @@
                "t" +
                "<'row dt-bottom'<'col-sm-12 col-md-4'i><'col-sm-12 col-md-4 text-center'l><'col-sm-12 col-md-4'p>>"
         }));
+        // Helpers to work with selection across all filtered rows
+        function filteredKeys(){
+          const keys = [];
+          if (!table) return keys;
+          table.rows({search:'applied'}).every(function(){
+            const row = this.data(); // array of cells
+            const html = row && row[0] ? String(row[0]) : '';
+            const m = html.match(/data-key=\"([^\"]*)\"/);
+            if (m) keys.push(m[1]);
+          });
+          return keys;
+        }
+        function syncVisibleCheckboxes(){
+          $('#devicesTable tbody input.row-select').each(function(){
+            const key = this.getAttribute('data-key') || '';
+            this.checked = selectedKeys.has(key);
+          });
+        }
+        function updateHeaderSelectAllState(){
+          const header = document.getElementById('selectAll');
+          if (!header || !table) return;
+          const keys = filteredKeys();
+          const total = keys.length;
+          let selected = 0;
+          for (const k of keys){ if (selectedKeys.has(k)) selected++; }
+          header.indeterminate = selected > 0 && selected < total;
+          header.checked = total > 0 && selected === total;
+        }
+        // Header select-all operates on all filtered rows (not just current page)
+        $('#devicesTable').on('change', '#selectAll, #selectAllHead', function(){
+          const checked = this.checked;
+          const keys = filteredKeys();
+          keys.forEach(k => { if (checked) selectedKeys.add(k); else selectedKeys.delete(k); });
+          syncVisibleCheckboxes();
+          updateHeaderSelectAllState();
+        });
+        // Row checkbox change handling (preserve selection across pages)
+        $('#devicesTable').on('change', 'tbody input.row-select', function(){
+          const key = this.getAttribute('data-key') || '';
+          if (this.checked) selectedKeys.add(key); else selectedKeys.delete(key);
+          updateHeaderSelectAllState();
+        });
+        // Keep checkboxes in sync on table redraws (paging, sorting, filtering)
+        $('#devicesTable').on('draw.dt', function(){
+          syncVisibleCheckboxes();
+          updateHeaderSelectAllState();
+        });
         // Inject action buttons into top-right area (fallback to filter if needed)
         (function ensureToolbarButtons(){
           if (document.getElementById('refreshBtn')) return; // already added
@@ -253,8 +314,8 @@
           container.appendChild(runBtn);
           container.appendChild(updBtn);
           // Wire events (functions can be defined elsewhere)
-          searchBtn.addEventListener('click', function(){ /* TBD */ });
-          runBtn.addEventListener('click', runQuery);
+          searchBtn.addEventListener('click', runQuery);
+          runBtn.addEventListener('click', function(){ /* TBD */ });
           updBtn.addEventListener('click', function(){ /* TBD */ });
         })();
       } else {
