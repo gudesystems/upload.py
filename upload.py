@@ -4,6 +4,7 @@ from configparser import ConfigParser
 from datetime import date
 from argparse import ArgumentParser, Namespace
 import os
+import sys
 import ipaddress
 from socket import gaierror
 from requests import get as req_get
@@ -737,4 +738,13 @@ def run_processing_from_options(
 
 
 if __name__ == "__main__":  # Ensure this runs only when script is executed directly
-    main()
+    # If no CLI arguments are given, launch the Web UI server and open browser
+    if len(sys.argv) <= 1:
+        try:
+            from webui.server import serve
+            # Bind on all interfaces but open browser to localhost
+            serve(host='0.0.0.0', port=8000, open_browser=True)
+        except Exception as e:
+            print(f"Failed to start Web UI server: {e}")
+    else:
+        main()

@@ -7,8 +7,11 @@ a = Analysis(
     ['upload.py'],
     pathex=[],
     binaries=[],
-    datas=[],
-    hiddenimports=(['requests'] + collect_submodules('gude')),
+    datas=[
+        ('webui/index.html', 'webui'),
+        ('webui/assets/*', 'webui/assets'),
+    ],
+    hiddenimports=(['requests', 'webui.server'] + collect_submodules('gude')),
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

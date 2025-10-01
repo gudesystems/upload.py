@@ -2,11 +2,20 @@ import json
 import os
 import sys
 import threading
+import webbrowser
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Optional, List
+
+"""
+Web UI server for the gude uploader.
+
+Enhancements:
+- Robust asset discovery for both source and PyInstaller one-file builds.
+- Optional auto-open of the default browser.
+"""
 
 # Ensure repository root is on sys.path so we can import upload.py when running this file directly
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,15 +29,21 @@ class State:
     running: bool = False
     results: List[DeviceResult] = []
 
+def _base_dir() -> Path:
+    """Return directory containing index.html/assets, both in src and frozen builds."""
+    if getattr(sys, 'frozen', False):
+        # In PyInstaller onefile, data files are extracted under _MEIPASS; we keep them under 'webui'
+        base = Path(getattr(sys, '_MEIPASS', Path(__file__).parent)).joinpath('webui')
+        if base.is_dir():
+            return base
+        # Fallback to _MEIPASS root
+        return Path(getattr(sys, '_MEIPASS', Path(__file__).parent))
+    return Path(__file__).parent
 
-def find_assets_dir() -> Optional[str]:
-    # Deprecated: previously auto-detected from exported HTML folders
-    # Kept for reference; no longer used.
-    return None
 
-
-# Hardcode assets folder next to index.html
-ASSETS_DIR = os.path.join(os.path.dirname(__file__), 'assets')
+# Assets/index resolved from base dir
+BASE_DIR = _base_dir()
+ASSETS_DIR = str(BASE_DIR.joinpath('assets'))
 
 
 def _json_default(obj):
@@ -103,7 +118,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(b'Not Found')
 
     def _serve_index(self):
-        index_path = os.path.join(os.path.dirname(__file__), 'index.html')
+        index_path = str(BASE_DIR.joinpath('index.html'))
         try:
             with open(index_path, 'rb') as f:
                 data = f.read()
@@ -206,9 +221,17 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
 
-def serve(host: str = '0.0.0.0', port: int = 8000):
+def serve(host: str = '0.0.0.0', port: int = 8000, *, open_browser: bool = False):
     httpd = ThreadingHTTPServer((host, port), Handler)
+    url = f"http://localhost:{port}"
     print(f"Web UI available at http://{host}:{port}")
+    # Open the default browser if requested
+    if open_browser:
+        try:
+            webbrowser.open_new_tab(url)
+        except Exception:
+            # Non-fatal: continue serving even if browser could not be opened
+            pass
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
@@ -218,4 +241,4 @@ def serve(host: str = '0.0.0.0', port: int = 8000):
 
 
 if __name__ == '__main__':
-    serve()
+    serve(open_browser=True)
