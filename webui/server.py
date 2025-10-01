@@ -51,6 +51,27 @@ def _run_gbl_query_async():
         State.running = False
 
 
+def _run_update_selected_async(hosts: list[str]):
+    try:
+        State.running = True
+        # Build devices mapping like: { 'hosts': { 'ip1': 'host:port', 'ip2': 'host:port', ... } }
+        devices = {'hosts': {}}
+        for idx, h in enumerate(hosts, start=1):
+            devices['hosts'][f'ip{idx}'] = str(h)
+
+        State.results = run_processing_from_options(
+            upload_ini="no_upload.ini",
+            version_ini="no_version.ini",
+            onlineupdate=True,
+            devices=devices,
+            forcefw=True,
+            status=False,
+            gbl=False,
+        )
+    finally:
+        State.running = False
+
+
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code=200, headers=None):
         self.send_response(code)
@@ -70,6 +91,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._api_devices()
         if path == '/api/run':
             return self._api_run()
+        self._send(404, {"Content-Type": "text/plain; charset=utf-8"})
+        self.wfile.write(b'Not Found')
+
+    def do_POST(self):
+        parsed = urlparse(self.path)
+        path = parsed.path
+        if path == '/api/update':
+            return self._api_update()
         self._send(404, {"Content-Type": "text/plain; charset=utf-8"})
         self.wfile.write(b'Not Found')
 
@@ -137,6 +166,39 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(data)
             return
         t = threading.Thread(target=_run_gbl_query_async, daemon=True)
+        t.start()
+        payload = {'running': True}
+        data = json.dumps(payload).encode('utf-8')
+        self._send(202, {"Content-Type": "application/json; charset=utf-8"})
+        self.wfile.write(data)
+
+    def _api_update(self):
+        if State.running:
+            payload = {'running': True}
+            data = json.dumps(payload).encode('utf-8')
+            self._send(200, {"Content-Type": "application/json; charset=utf-8"})
+            self.wfile.write(data)
+            return
+        # Read JSON body
+        length = int(self.headers.get('Content-Length', '0') or '0')
+        raw = self.rfile.read(length) if length > 0 else b'{}'
+        try:
+            body = json.loads(raw.decode('utf-8')) if raw else {}
+        except Exception:
+            body = {}
+        hosts: list[str] = []
+        # Accept either {"hosts": [..]} or a nested devices mapping
+        if isinstance(body.get('hosts'), list):
+            hosts = [str(x) for x in body['hosts']]
+        elif isinstance(body.get('devices'), dict):
+            dvc = body['devices'].get('hosts') or {}
+            if isinstance(dvc, dict):
+                # devices.hosts is mapping ip1->"host:port"
+                hosts = [str(v) for _, v in sorted(dvc.items())]
+            elif isinstance(dvc, list):
+                hosts = [str(x) for x in dvc]
+
+        t = threading.Thread(target=_run_update_selected_async, args=(hosts,), daemon=True)
         t.start()
         payload = {'running': True}
         data = json.dumps(payload).encode('utf-8')

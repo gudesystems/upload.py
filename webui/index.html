@@ -315,8 +315,8 @@
           container.appendChild(updBtn);
           // Wire events (functions can be defined elsewhere)
           searchBtn.addEventListener('click', runQuery);
-          runBtn.addEventListener('click', function(){ /* TBD */ });
-          updBtn.addEventListener('click', function(){ /* TBD */ });
+          runBtn.addEventListener('click', function(){ /* TBD: separate refresh vs find if needed */ });
+          updBtn.addEventListener('click', runUpdate);
         })();
       } else {
         table.clear();
@@ -346,6 +346,35 @@
         console.error(e);
       } finally {
         document.getElementById('refreshBtn').disabled = false;
+      }
+    }
+
+    async function runUpdate(){
+      try {
+        const btn = document.getElementById('updateBtn');
+        if (!btn) return;
+        const hosts = Array.from(selectedKeys);
+        if (hosts.length === 0){
+          alert('Please select at least one device.');
+          return;
+        }
+        btn.disabled = true;
+        await fetch('/api/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hosts })
+        });
+        let running = true;
+        while (running) {
+          running = await fetchDevices();
+          await new Promise(r => setTimeout(r, 1500));
+        }
+      } catch (e) {
+        console.error(e);
+        alert('Update request failed. See console for details.');
+      } finally {
+        const btn = document.getElementById('updateBtn');
+        if (btn) btn.disabled = false;
       }
     }
 

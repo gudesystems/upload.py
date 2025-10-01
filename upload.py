@@ -689,6 +689,23 @@ def run_processing_from_options(
     # Merge device overrides
     config = add_devices_to_config(args, config)
 
+    # If devices contain host entries like "host:port", ensure a matching
+    # section exists with the extracted port so iterate_list can apply it.
+    try:
+        if config.has_section('hosts'):
+            for _, target in config.items('hosts'):
+                # Avoid CIDR; handle IPv6 [addr]:port or hostname:port
+                if ':' in target and '/' not in target:
+                    # If IPv6 in brackets, ensure colon is after ']'
+                    tail = target.rpartition(']')[2] if ']' in target else target
+                    if ':' in tail:
+                        if not config.has_section(target):
+                            config[target] = {}
+                        config[target]['port'] = target.rpartition(':')[2]
+    except Exception:
+        # Do not fail the run if hosts parsing is odd; fall back to defaults
+        pass
+
     # Configure authentication defaults
     configure_auth_settings(config)
 
