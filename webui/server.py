@@ -82,6 +82,7 @@ def _run_update_selected_async(hosts: list[str]):
             forcefw=True,
             status=False,
             gbl=False,
+            device_concurrency=2
         )
     finally:
         State.running = False

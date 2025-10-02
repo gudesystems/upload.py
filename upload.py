@@ -9,7 +9,8 @@ import ipaddress
 from socket import gaierror
 from requests import get as req_get
 from requests.exceptions import Timeout, HTTPError, RequestException
-from typing import Tuple, Optional, List, Dict, Any
+from typing import Tuple, Optional, List, Dict, Any, Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 
 from gude.deployDev import DeployDev
@@ -150,6 +151,8 @@ def parse_args() -> Tuple[Namespace, ConfigParser, ConfigParser, str]:
     parser.add_argument('-S', '--status', help='Only fetch device status without making any changes', action="store_true", default=False)
     parser.add_argument('-G', '--gbl', help='Use GBL broadcast', action="store_true", default=False)
     parser.add_argument('-ng', '--nogbl', help='Dont use GBL', action="store_true", default=False)
+    parser.add_argument('--device-concurrency', type=int, default=1, help='Number of devices processed in parallel (default: 1)')
+    parser.add_argument('--jsonl-progress', type=str, default=None, help='Write progress events to a JSONL file')
     _args = parser.parse_args()
 
     log.debug(f"Reading {_args.upload_ini} ...")
@@ -293,7 +296,13 @@ class DeviceResult:
     error_message: Optional[str] = None
 
 
-def iterate_list(_ip_list: List[str], _firmware: ConfigParser, _config: ConfigParser, _args: object) -> List[DeviceResult]:
+def iterate_list(
+    _ip_list: List[str],
+    _firmware: ConfigParser,
+    _config: ConfigParser,
+    _args: object,
+    progress_cb: Optional[Callable[[Dict[str, Any]], None]] = None,
+) -> List[DeviceResult]:
     """
     Function that iterates over all hosts from _ip_list hosts,
     matching corresponding firmware in _firmware,
@@ -311,9 +320,19 @@ def iterate_list(_ip_list: List[str], _firmware: ConfigParser, _config: ConfigPa
 
     results: List[DeviceResult] = [] # Type hint for results
     log.debug(f"trying {len(_ip_list)} devices")
-    for ip_str_or_obj in _ip_list: # ip can be str or IPv4Address/IPv6Address from older generate_ip_list
+
+    # Optional progress emitter
+    def emit(evt: Dict[str, Any]):
+        if progress_cb:
+            try:
+                progress_cb(evt)
+            except Exception:
+                pass
+
+    def _process_device(ip_str_or_obj: Any) -> DeviceResult:
         ip = str(ip_str_or_obj) # Ensure ip is a string for consistency
         result = DeviceResult(ip=ip, product_name="unknown", mac="unknown", initial_firmware="unknown")
+        emit({"type": "device_start", "ip": ip})
         
         try:
             log.debug(f"Processing device: {ip}")
@@ -349,11 +368,10 @@ def iterate_list(_ip_list: List[str], _firmware: ConfigParser, _config: ConfigPa
 
             log.debug(f"Using config-key '{config_key}' for device {ip}")
 
-            # Apply HTTP defaults using the generalized function
-            set_config_defaults(_config, config_key, DEFAULT_SETTINGS['httpDefaults'])
             # Determine connection settings
-            port = int(_config.get(config_key, 'port', fallback=80))
-            use_ssl = _config.getboolean(config_key, 'ssl', fallback=False)
+            # Avoid mutating shared config during concurrency
+            port = int(_config.get(config_key, 'port', fallback=int(_config.get('httpDefaults', 'port', fallback=80))))
+            use_ssl = _config.getboolean(config_key, 'ssl', fallback=_config.getboolean('httpDefaults', 'ssl', fallback=False))
             # Apply to device
             dev.set_http_port(port, use_ssl)
             dev.set_basic_auth(_config.getboolean(config_key, 'auth', fallback=False),
@@ -376,22 +394,26 @@ def iterate_list(_ip_list: List[str], _firmware: ConfigParser, _config: ConfigPa
                     log.error(f"Authentication Error on defined port/protocol for {ip}: {e}")
                     result.error_message = f"Authentication Error: {e}"
                     results.append(result)
-                    continue
+                    #continue
+                    return result
                 else:
                     log.error(f"HTTPError for {ip}: {e}")
                     result.error_message = f"HTTPError: {e}"
                     results.append(result)
-                    continue # Re-raise if you want to stop all processing
+                    #continue # Re-raise if you want to stop all processing
+                    return result
             except (Timeout, ConnectionError) as ce: # Catch Timeout and ConnectionError
                 log.error(f"Could not reach device on defined port/protocol for {ip}: {ce}")
                 result.error_message = f"Connection/Timeout Error: {ce}"
                 results.append(result)
-                continue
+                #continue
+                return result
             except Exception as e_misc: # Catch other potential errors during initial status fetch
                 log.error(f"Unexpected error fetching initial status for {ip}: {e_misc}")
                 result.error_message = f"Unexpected initial status error: {e_misc}"
                 results.append(result)
-                continue
+                #continue
+                return result
 
             result.product_name = device_data['product_name']
             result.initial_firmware = device_data['firm_v']
@@ -402,13 +424,15 @@ def iterate_list(_ip_list: List[str], _firmware: ConfigParser, _config: ConfigPa
             if not getattr(_args, 'nogbl', False):
                 try:
                     log.info(f"Attempting to get MAC for {ip} via GBL/UDP...")
-                    if not gbl.check_mac(str(dev_ip_for_conn)): # Use dev_ip_for_conn which should be clean IP
+                    # Create a fresh GBL instance per device to avoid shared state in threads
+                    _gbl = Gblib()
+                    if not _gbl.check_mac(str(dev_ip_for_conn)): # Use dev_ip_for_conn which should be clean IP
                         log.warning(f"GBL Timeout (UDP port 50123) for {dev_ip_for_conn}")
                         gbl_error = True
                     else:
                         # extract mac (bytes longer than 255 result in two hex values so b'\x192' results in 1*16+9 and 2*16+0)
                         # this dec values need to be converted back to hex ('x') as string with the length 2 ('02')
-                        mac = '_'.join(f'{c:02x}' for c in gbl.dstMAC)
+                        mac = '_'.join(f'{c:02x}' for c in _gbl.dstMAC)
                         log.info(f"Got MAC {mac} for {dev_ip_for_conn} via GBL.")
                 except (gaierror, ConnectionResetError, OSError) as e_gbl: # OSError for network unreachable
                     log.warning(f"GBL MAC retrieval failed for {dev_ip_for_conn}: {e_gbl}")
@@ -490,7 +514,8 @@ def iterate_list(_ip_list: List[str], _firmware: ConfigParser, _config: ConfigPa
                 result.firmware_status = "status only, no changes made"
                 result.success = False
                 results.append(result)
-                continue
+                #continue
+                return result
 
             # deploy Firmware
             if selected_prod_id and selected_prod_id in _firmware: # Check if selected_prod_id is valid for _firmware
@@ -559,8 +584,33 @@ def iterate_list(_ip_list: List[str], _firmware: ConfigParser, _config: ConfigPa
             result.error_message = str(e)
             result.success = False # Ensure success is false on major error
 
-        results.append(result)
-    
+        emit({
+            "type": "device_done",
+            "ip": ip,
+            "ok": result.success,
+            "product": result.product_name,
+            "initial_fw": result.initial_firmware,
+            "final_fw": result.final_firmware,
+            "status": result.firmware_status,
+            "error": result.error_message,
+        })
+        return result
+
+    concurrency = int(getattr(_args, 'device_concurrency', 1) or 1)
+    if concurrency <= 1:
+        for ip_str_or_obj in _ip_list:
+            results.append(_process_device(ip_str_or_obj))
+        return results
+
+    # Concurrent execution
+    with ThreadPoolExecutor(max_workers=concurrency) as pool:
+        future_map = {pool.submit(_process_device, ip_obj): ip_obj for ip_obj in _ip_list}
+        for fut in as_completed(future_map):
+            try:
+                results.append(fut.result())
+            except Exception as e:
+                ip_obj = future_map[fut]
+                results.append(DeviceResult(ip=str(ip_obj), product_name="unknown", mac="unknown", initial_firmware="unknown", success=False, error_message=str(e)))
     return results
 
 
@@ -600,8 +650,32 @@ def main() -> None:
     # Pass the 'hosts' section of config, not the whole config object
     ip_list = generate_ip_list(config, my_ip, float(config.get('defaults', 'gblTimeout', fallback=1.0)))
 
-    # iterate devices, get each dev info, update fw, config and certificate
-    processing_results = iterate_list(ip_list, firmware, config, args)
+    # Optional JSONL progress writer
+    progress_fp = None
+    def _progress_cb(evt: Dict[str, Any]):
+        if progress_fp:
+            try:
+                progress_fp.write(json.dumps(evt, ensure_ascii=False) + "\n")
+                progress_fp.flush()
+            except Exception:
+                pass
+
+    if getattr(args, 'jsonl_progress', None):
+        try:
+            progress_fp = open(args.jsonl_progress, 'a', encoding='utf-8')
+        except Exception as e:
+            log.warning(f"Could not open JSONL progress file {args.jsonl_progress}: {e}")
+            progress_fp = None
+
+    try:
+        # iterate devices, get each dev info, update fw, config and certificate
+        processing_results = iterate_list(ip_list, firmware, config, args, progress_cb=_progress_cb if progress_fp else None)
+    finally:
+        if progress_fp:
+            try:
+                progress_fp.close()
+            except Exception:
+                pass
 
     log.info("\nDevice Processing Summary:")
     log.info("-" * 80)
@@ -650,6 +724,8 @@ def run_processing_from_options(
     forcefw: bool = False,
     repl_prod_id: Optional[Dict[str, str]] = None,
     configip: Optional[str] = None,
+    device_concurrency: int = 1,
+    progress_cb: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> List[DeviceResult]:
     """
     Programmatic entry-point to run the processing without CLI.
@@ -672,6 +748,8 @@ def run_processing_from_options(
     args.gbl = gbl
     # Keep parity with CLI: default to using GBL unless explicitly disabled
     args.nogbl = False
+    # Concurrency for programmatic callers
+    args.device_concurrency = int(device_concurrency or 1)
 
     # Read upload.ini
     log.debug(f"[web] Reading {args.upload_ini} ...")
@@ -733,7 +811,7 @@ def run_processing_from_options(
     # Build IP list and run processing
     add_iprange_to_config(args.iprange, config)
     ip_list = generate_ip_list(config, my_ip, float(config.get('defaults', 'gblTimeout', fallback=1.0)))
-    results = iterate_list(ip_list, firmware, config, args)
+    results = iterate_list(ip_list, firmware, config, args, progress_cb=progress_cb)
     return results
 
 
