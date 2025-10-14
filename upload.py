@@ -75,6 +75,132 @@ def fetch_latest_fw_infos(base_url: str   = BASE_URL) -> ConfigParser:
     return cfg
 
 
+# --- Firmware/model resolution helpers --------------------------------------
+
+def _parse_specific_model_from_product_name(product_name: str) -> Optional[str]:
+    """
+    Try to derive a specific 6-digit EPC model from a product name.
+    Example: "Expert Power Control 87-1230-18" -> "871230".
+    Returns None if no pattern match.
+    """
+    try:
+        m = re.search(r"\b87-([0-9]{4})\b", product_name)
+        if not m:
+            return None
+        digits = m.group(1)
+        return f"87{digits}"
+    except Exception:
+        return None
+
+
+def _version_key(v: str) -> tuple:
+    """Turn a version like '1.2.3' or '1.2.3-R2' into a sortable key."""
+    if not isinstance(v, str):
+        return (0,)
+    # Strip known suffixes like '-R2' for ordering purposes only
+    core = v.split('-')[0]
+    parts = re.findall(r"\d+", core)
+    try:
+        return tuple(int(p) for p in parts)
+    except Exception:
+        return (0,)
+
+
+def resolve_prodid(
+    *,
+    actual_prodid: str,
+    product_name: str,
+    firmware_cfg: ConfigParser,
+    repl_map: Optional[Dict[str, str]] = None,
+) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Resolve a device's product id to a concrete firmware section present in firmware_cfg.
+    - Handles exact match
+    - Applies replacement mapping (repl_map)
+    - Handles wildcard prodids with 'x' or 'xx': uses product_name to specialize, then regex match
+    Returns (selected_prodid, latest_known_version) or (None, None) if unresolved.
+    """
+    if not actual_prodid:
+        return None, None
+
+    sections = set(firmware_cfg.sections())
+    # case-insensitive lookup map for sections
+    sec_lc_map: Dict[str, str] = {s.lower(): s for s in sections}
+
+    # Helper: get version from cfg if available
+    def get_ver(sec: str) -> Optional[str]:
+        try:
+            return firmware_cfg.get(sec, 'version', fallback=None)
+        except Exception:
+            return None
+
+    # Normalize for comparisons but keep original section keys
+    ap_l = actual_prodid.strip()
+
+    # 1) Exact match (case-insensitive convenience)
+    if ap_l in sections:
+        return ap_l, get_ver(ap_l)
+    if ap_l.lower() in sec_lc_map:
+        sec = sec_lc_map[ap_l.lower()]
+        return sec, get_ver(sec)
+
+    # 2) Apply replacement map
+    if repl_map and ap_l in repl_map:
+        cand = repl_map[ap_l]
+        if cand in sections:
+            return cand, get_ver(cand)
+        if cand.lower() in sec_lc_map:
+            sec = sec_lc_map[cand.lower()]
+            return sec, get_ver(sec)
+
+    # 3) Handle wildcard prodids: contains any 'x' or 'X' or 'xx'
+    has_wildcard = 'x' in ap_l or 'X' in ap_l
+    selected: Optional[str] = None
+    selected_ver: Optional[str] = None
+
+    if has_wildcard:
+        # 3a) Try to specialize via product_name (e.g. 871x10 -> 871230)
+        specific = _parse_specific_model_from_product_name(product_name or '')
+        if specific and specific in sections:
+            selected = specific
+            selected_ver = get_ver(specific)
+        else:
+            # 3b) Regex-expand the wildcard and find best candidate by version
+            # Build case-sensitive pattern replacing 'xx' -> '\d\d', 'x' -> '\d'
+            pat_str = re.escape(ap_l)
+            pat_str = pat_str.replace('XX', r'\d\d').replace('xx', r'\d\d')
+            pat_str = pat_str.replace('X', r'\d').replace('x', r'\d')
+            pat = re.compile(f"^{pat_str}$")
+            matches = [sec for sec in sections if pat.match(sec)]
+            if matches:
+                # Prefer the one with highest version number if available
+                best = None
+                best_ver_key = None
+                best_ver_str = None
+                for sec in matches:
+                    ver = get_ver(sec)
+                    key = _version_key(ver) if ver else (0,)
+                    if best is None or key > best_ver_key:  # type: ignore
+                        best = sec
+                        best_ver_key = key
+                        best_ver_str = ver
+                selected = best
+                selected_ver = best_ver_str
+
+        # 3c) If nothing found but a family alias section exists (e.g., '871x10' in version.ini), use it
+        if not selected:
+            if ap_l in sections:
+                selected = ap_l
+                selected_ver = get_ver(ap_l)
+            elif ap_l.lower() in sec_lc_map:
+                sec = sec_lc_map[ap_l.lower()]
+                selected = sec
+                selected_ver = get_ver(sec)
+
+    # 4) Return what we have (may still be None)
+    return selected, selected_ver
+
+
 def add_devices_to_config(_args: Namespace, _config: ConfigParser) -> ConfigParser:
     """
     Add devices from command line args to the config parser object
@@ -453,48 +579,18 @@ def iterate_list(
 
             # --- before logging/deploy ---
             actual_prod_id = device_data['prodid']
-            selected_prod_id = None
-
-            # 1) Try exact match on the original prodid
-            if actual_prod_id in _firmware:
-                selected_prod_id = actual_prod_id
-
-            # log.debug(f"{actual_prod_id} not found in {_firmware.sections()}")
-            # 2) If no match yet, apply your replacement map
-            if not selected_prod_id and _args.repl_prod_id:
-                repl_map_str_any = _args.repl_prod_id # This is already a dict due to type=json.loads
-                repl_map = repl_map_str_any if isinstance(repl_map_str_any, dict) else {}
-
-                if actual_prod_id in repl_map:
-                    log.debug(f"{actual_prod_id} found in {repl_map}")
-                    candidate = repl_map[actual_prod_id]
-                    if candidate in _firmware:
-                        log.debug(f"{actual_prod_id} to be replaced with {candidate} (based on provided mapping)")
-                        selected_prod_id = candidate
-            # 3) If still nothing, and prodid contains "xx", inject the real number from product_name
-            if not selected_prod_id and "xx" in actual_prod_id:
-                m = re.search(r"(\d+)-", device_data["product_name"])
-                if m:
-                    # take the last 2 digits of the number you found to fill "xx"
-                    real_digits = m.group(1)[-2:]
-                    candidate = actual_prod_id.replace("xx", real_digits)
-                    if candidate in _firmware:
-                        selected_prod_id = candidate
-            # 4) Finally, if still nothing and prodid contains "xx", do a regex wildcard match
-            if not selected_prod_id and "xx" in actual_prod_id:
-                # build a pattern like "^80\d\dR2?$" or "^21\d\ddi?$" etc.
-                pat = "^" + re.escape(actual_prod_id).replace("xx", r"\d\d") + "$"
-                for fw_id in _firmware:
-                    if re.match(pat, fw_id):
-                        selected_prod_id = fw_id
-                        break
+            # Build replacement map (if provided via args)
+            repl_map = _args.repl_prod_id if isinstance(getattr(_args, 'repl_prod_id', None), dict) else None
+            selected_prod_id, selected_version = resolve_prodid(
+                actual_prodid=actual_prod_id,
+                product_name=device_data.get('product_name') or '',
+                firmware_cfg=_firmware,
+                repl_map=repl_map,
+            )
             # update device_data and log
             if selected_prod_id:
                 device_data["prodid"] = selected_prod_id # Update prodid for update_firmware call
-                if selected_prod_id in _firmware:
-                    result.latest_known_firmware = _firmware[selected_prod_id]['version']
-                else:
-                    result.latest_known_firmware = "unknown"
+                result.latest_known_firmware = selected_version or "unknown"
                 log.info(
                     f"{device_data['product_name']} "
                     f"({actual_prod_id} -> {selected_prod_id}, {mac}) at {ip}\n"
