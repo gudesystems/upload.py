@@ -393,25 +393,21 @@ def iterate_list(
                 if e.response.status_code == 401:
                     log.error(f"Authentication Error on defined port/protocol for {ip}: {e}")
                     result.error_message = f"Authentication Error: {e}"
-                    results.append(result)
                     #continue
                     return result
                 else:
                     log.error(f"HTTPError for {ip}: {e}")
                     result.error_message = f"HTTPError: {e}"
-                    results.append(result)
                     #continue # Re-raise if you want to stop all processing
                     return result
             except (Timeout, ConnectionError) as ce: # Catch Timeout and ConnectionError
                 log.error(f"Could not reach device on defined port/protocol for {ip}: {ce}")
                 result.error_message = f"Connection/Timeout Error: {ce}"
-                results.append(result)
                 #continue
                 return result
             except Exception as e_misc: # Catch other potential errors during initial status fetch
                 log.error(f"Unexpected error fetching initial status for {ip}: {e_misc}")
                 result.error_message = f"Unexpected initial status error: {e_misc}"
-                results.append(result)
                 #continue
                 return result
 
@@ -463,7 +459,7 @@ def iterate_list(
             if actual_prod_id in _firmware:
                 selected_prod_id = actual_prod_id
 
-            log.debug(f"{actual_prod_id} not found in {_firmware.sections()}")
+            # log.debug(f"{actual_prod_id} not found in {_firmware.sections()}")
             # 2) If no match yet, apply your replacement map
             if not selected_prod_id and _args.repl_prod_id:
                 repl_map_str_any = _args.repl_prod_id # This is already a dict due to type=json.loads
@@ -513,7 +509,6 @@ def iterate_list(
             if _args.status:
                 result.firmware_status = "status only, no changes made"
                 result.success = False
-                results.append(result)
                 #continue
                 return result
 
