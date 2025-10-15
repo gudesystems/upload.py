@@ -415,6 +415,8 @@ class DeviceResult:
     conn_ssl: Optional[bool] = None
     url: Optional[str] = None
     latest_known_firmware: Optional[str] = None
+    latest_publish_date: Optional[str] = None
+    selected_prodid: Optional[str] = None
     final_firmware: Optional[str] = None
     firmware_status: str = "not attempted"
     firmware_upload_notes: Optional[str] = None
@@ -590,7 +592,22 @@ def iterate_list(
             # update device_data and log
             if selected_prod_id:
                 device_data["prodid"] = selected_prod_id # Update prodid for update_firmware call
-                result.latest_known_firmware = selected_version or "unknown"
+                # Track selected product id for summary/use
+                result.selected_prodid = selected_prod_id
+                # Derive display version including R2 suffix where applicable
+                disp_version = selected_version or "unknown"
+                if selected_version and ("R2" in selected_prod_id or selected_prod_id.endswith('R2')):
+                    if ('-R2' not in selected_version) and ('-r2' not in selected_version):
+                        disp_version = f"{selected_version}-R2"
+                result.latest_known_firmware = disp_version
+                # Determine publish date for latest known version (prefer model 'date' for online sources)
+                try:
+                    if _args.onlineupdate and _firmware.has_option(selected_prod_id, 'date'):
+                        result.latest_publish_date = _firmware.get(selected_prod_id, 'date')
+                    elif _firmware.has_section('url') and _firmware.has_option('url', 'last_update'):
+                        result.latest_publish_date = _firmware.get('url', 'last_update')
+                except Exception:
+                    result.latest_publish_date = None
                 log.info(
                     f"{device_data['product_name']} "
                     f"({actual_prod_id} -> {selected_prod_id}, {mac}) at {ip}\n"
@@ -783,7 +800,8 @@ def main() -> None:
         if res_item.final_firmware and res_item.final_firmware != res_item.initial_firmware:
             device_fw.append(f"{res_item.final_firmware}(current)")
         else:
-            last_update = firmware["url"]["last_update"] if firmware.has_section("url") and firmware.has_option("url", "last_update") else "known"
+            # Prefer per-version publish date when available (esp. onlineupdate)
+            last_update = res_item.latest_publish_date if res_item.latest_publish_date else (firmware["url"]["last_update"] if firmware.has_section("url") and firmware.has_option("url", "last_update") else "known")
             device_fw.append(f"{res_item.latest_known_firmware}(latest {last_update})")
             
         log.info(", ".join(device_info))
