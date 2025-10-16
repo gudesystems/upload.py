@@ -417,6 +417,7 @@ class DeviceResult:
     latest_known_firmware: Optional[str] = None
     latest_publish_date: Optional[str] = None
     selected_prodid: Optional[str] = None
+    status_only: bool = False
     final_firmware: Optional[str] = None
     firmware_status: str = "not attempted"
     firmware_upload_notes: Optional[str] = None
@@ -621,8 +622,8 @@ def iterate_list(
             # continue here for status
             if _args.status:
                 result.firmware_status = "status only, no changes made"
+                result.status_only = True
                 result.success = False
-                #continue
                 return result
 
             # deploy Firmware
@@ -795,7 +796,9 @@ def main() -> None:
             f"{res_item.mac}"
         ]
 
-        device_fw = [f"{res_item.initial_firmware}(previous)"]
+        # Label initial firmware: show "current" for status-only runs, otherwise "previous"
+        initial_label = 'current' if getattr(res_item, 'status_only', False) else 'previous'
+        device_fw = [f"{res_item.initial_firmware}({initial_label})"]
         
         if res_item.final_firmware and res_item.final_firmware != res_item.initial_firmware:
             device_fw.append(f"{res_item.final_firmware}(current)")

@@ -181,11 +181,15 @@
     const selectedKeys = new Set();
     const firmwareText = (r) => {
       const parts = [];
-      if (r.initial_firmware) parts.push(`${r.initial_firmware} (previous)`);
+      if (r.initial_firmware) {
+        const initialLabel = r.status_only ? 'current' : 'previous';
+        parts.push(`${r.initial_firmware} (${initialLabel})`);
+      }
       if (r.final_firmware && r.final_firmware !== r.initial_firmware) {
         parts.push(`${r.final_firmware} (current)`);
       } else if (r.latest_known_firmware) {
-        parts.push(`${r.latest_known_firmware} (latest)`);
+        const date = (r.latest_publish_date && String(r.latest_publish_date).trim()) ? ` ${r.latest_publish_date}` : '';
+        parts.push(`${r.latest_known_firmware} (latest${date ? ' ' + r.latest_publish_date : ''})`);
       }
       return parts.join(', ');
     };
