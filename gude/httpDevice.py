@@ -235,52 +235,62 @@ class HttpDevice(DeviceValues):
         self.allStatusJson = None
         self.entities = None
 
-    def wait_reboot(self, max_wait_secs=20.0, pre_wait_secs=5.0, req_headers=None):
+    def wait_reboot(self, max_wait_secs=20.0, pre_wait_secs=5.0, req_headers=None, show_progress_bar=True):
         total = int(pre_wait_secs) + int(max_wait_secs)
         for i in range(0, int(pre_wait_secs)):
             # log.info(".")
-            print_progress_bar(i, total, fill='#', clear=' ', unit='seconds')
+            if show_progress_bar:
+                print_progress_bar(i, total, fill='#', clear=' ', unit='seconds')
+            else:
+                if i % 5 == 0:
+                    log.info(f"[{self.host}] Rebooting... {i}/{total} seconds")
             time.sleep(1)
         retries = max_wait_secs
         while retries:
             if self.http_ping(1.0, req_headers):
-                print_progress_bar(total, total, fill='#', clear=' ', unit='seconds',
-                                   actual=int(pre_wait_secs) + max_wait_secs - retries)
-                log.info("{0}:{1} up".format(self.host, self.httpOpts["port"]))
+                if show_progress_bar:
+                    print_progress_bar(total, total, fill='#', clear=' ', unit='seconds',
+                                       actual=int(pre_wait_secs) + max_wait_secs - retries)
+                log.info(f"[{self.host}] {self.host}:{self.httpOpts['port']} up")
                 time.sleep(1)
                 return True
             else:
                 retries -= 1
                 # log.info(".")
-                print_progress_bar(int(pre_wait_secs) + max_wait_secs - retries, total, fill='#', clear=' ',
-                                   unit='seconds')
+                current_sec = int(pre_wait_secs) + max_wait_secs - retries
+                if show_progress_bar:
+                    print_progress_bar(current_sec, total, fill='#', clear=' ',
+                                       unit='seconds')
+                else:
+                    if current_sec % 5 == 0:
+                        log.info(f"[{self.host}] Rebooting... {current_sec}/{total} seconds")
 
-        log.error("ERROR: no reply, giving up")
+        log.error(f"[{self.host}] ERROR: no reply, giving up")
         return False
 
-    def reboot_cmd(self, cmd, wait_reboot=False, max_wait_secs=20.0, req_headers=None):
+    def reboot_cmd(self, cmd, wait_reboot=False, max_wait_secs=20.0, req_headers=None, show_progress_bar=True):
         self.http_cgi_json_cmd(cmd, req_headers)
         if wait_reboot:
-            return self.wait_reboot(max_wait_secs)
+            return self.wait_reboot(max_wait_secs, show_progress_bar=show_progress_bar)
         else:
             return True
 
     #
     # reboot device to Fab Defaults
     #
-    def reboot_fab(self, wait_reboot=True):
-        log.info("Reboot to FabSettings...")
+    def reboot_fab(self, wait_reboot=True, show_progress_bar=True):
+        log.info(f"[{self.host}] Reboot to FabSettings...")
         self.flush_config_buffer()
-        ret = self.reboot_cmd(self.CGI_CMD_RESET_TO_FAB, wait_reboot)
+        ret = self.reboot_cmd(self.CGI_CMD_RESET_TO_FAB, wait_reboot, show_progress_bar=show_progress_bar)
         return ret
 
     #
     # reboot device
     #
-    def reboot(self, wait_reboot=True, max_wait_secs=20):
-        log.info("Rebooting...")
+    def reboot(self, wait_reboot=True, max_wait_secs=20, show_progress_bar=True):
+        log.info(f"[{self.host}] Rebooting...")
         self.flush_config_buffer()
-        ret = self.reboot_cmd(self.CGI_CMD_RESET, wait_reboot, max_wait_secs)
+        ret = self.reboot_cmd(self.CGI_CMD_RESET, wait_reboot, max_wait_secs, show_progress_bar=show_progress_bar)
         return ret
 
     #
@@ -324,7 +334,7 @@ class HttpDevice(DeviceValues):
         cgi = {'id': typ, 'idx': idx, 'context': context, 'pipe': pipe}
         if extra is not None:
             cgi['extra'] = extra
-        log.info(f"Trigger test event {typ}.{idx} context({context}) pipe({pipe}) extra({extra})")
+        log.info(f"[{self.host}] Trigger test event {typ}.{idx} context({context}) pipe({pipe}) extra({extra})")
         return self.http_cgi_json_cmd(HttpDevice.CGI_CMD_TEST_EVENT_MSG, cgi, req_headers)
 
     def export_config(self, req_headers=None):

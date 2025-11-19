@@ -447,6 +447,9 @@ def iterate_list(
     # TODO: Is GBL in this context necessary?
     gbl = Gblib()
 
+    concurrency = int(getattr(_args, 'device_concurrency', 1) or 1)
+    use_progress_bar = (concurrency <= 1)
+
     results: List[DeviceResult] = [] # Type hint for results
     log.debug(f"trying {len(_ip_list)} devices")
 
@@ -548,7 +551,7 @@ def iterate_list(
             # Respect optional args.nogbl; default to False when missing
             if not getattr(_args, 'nogbl', False):
                 try:
-                    log.info(f"Attempting to get MAC for {ip} via GBL/UDP...")
+                    log.info(f"[{ip}] Attempting to get MAC for {ip} via GBL/UDP...")
                     # Create a fresh GBL instance per device to avoid shared state in threads
                     _gbl = Gblib()
                     if not _gbl.check_mac(str(dev_ip_for_conn)): # Use dev_ip_for_conn which should be clean IP
@@ -558,17 +561,17 @@ def iterate_list(
                         # extract mac (bytes longer than 255 result in two hex values so b'\x192' results in 1*16+9 and 2*16+0)
                         # this dec values need to be converted back to hex ('x') as string with the length 2 ('02')
                         mac = '_'.join(f'{c:02x}' for c in _gbl.dstMAC)
-                        log.info(f"Got MAC {mac} for {dev_ip_for_conn} via GBL.")
+                        log.info(f"[{ip}] Got MAC {mac} for {dev_ip_for_conn} via GBL.")
                 except (gaierror, ConnectionResetError, OSError) as e_gbl: # OSError for network unreachable
                     log.warning(f"GBL MAC retrieval failed for {dev_ip_for_conn}: {e_gbl}")
                     gbl_error = True
                 
             if gbl_error:
-                log.info(f"Falling back to HTTP(S) to get MAC for {dev_ip_for_conn}...")
+                log.info(f"[{ip}] Falling back to HTTP(S) to get MAC for {dev_ip_for_conn}...")
                 try:
                     mac_http = dev.http_get_status_json(DeployDev.JSON_STATUS_ETHERNET, req_headers=None)['ethernet']['mac']
                     mac = mac_http.replace(':', '_')
-                    log.info(f"Got MAC {mac} for {dev_ip_for_conn} via HTTP(S).")
+                    log.info(f"[{ip}] Got MAC {mac} for {dev_ip_for_conn} via HTTP(S).")
                 except (RequestException, ValueError, TimeoutError) as e_http_mac:
                     log.error(f"Could not get MAC via HTTP(S) for {dev_ip_for_conn}: {e_http_mac}")
                     # Keep mac as "unknown-mac" or previous GBL error value
@@ -632,7 +635,8 @@ def iterate_list(
                     fw_update_result = dev.update_firmware(device_data, _firmware,
                                                            _config.get('defaults', 'fwdir', fallback='fw'),
                                                            forced=_args.forcefw,
-                                                           online_update=_args.onlineupdate)
+                                                           online_update=_args.onlineupdate,
+                                                           show_progress_bar=use_progress_bar)
 
                     result.final_firmware = fw_update_result.get("final_version", result.initial_firmware)
                     result.firmware_status = fw_update_result.get("status_message", "firmware update status unknown")
@@ -648,8 +652,8 @@ def iterate_list(
             if cfg_filename is not None:
                 log.debug(f"Attempting to upload configuration {cfg_filename} to {ip}...")
                 try:
-                    dev.upload_config(cfg_filename, _args.configip)
-                    log.info(f"Successfully uploaded configuration {cfg_filename} to {ip}.")
+                    dev.upload_config(cfg_filename, _args.configip, show_progress_bar=use_progress_bar)
+                    log.info(f"[{ip}] Successfully uploaded configuration {cfg_filename}.")
                 except Exception as e_cfg:
                     log.error(f"Failed to upload configuration {cfg_filename} to {ip}: {e_cfg}")
                     if result.error_message: result.error_message += f"; Config upload error: {e_cfg}"
@@ -660,8 +664,8 @@ def iterate_list(
             if ssl_cert_filename is not None:
                 log.debug(f"Attempting to upload SSL certificate {ssl_cert_filename} to {ip}...")
                 try:
-                    dev.upload_ssl_certificate(ssl_cert_filename)
-                    log.info(f"Successfully uploaded SSL certificate {ssl_cert_filename} to {ip}.")
+                    dev.upload_ssl_certificate(ssl_cert_filename, show_progress_bar=use_progress_bar)
+                    log.info(f"[{ip}] Successfully uploaded SSL certificate {ssl_cert_filename}.")
                 except Exception as e_ssl:
                     log.error(f"Failed to upload SSL certificate {ssl_cert_filename} to {ip}: {e_ssl}")
                     if result.error_message: result.error_message += f"; SSL cert upload error: {e_ssl}"
@@ -671,7 +675,7 @@ def iterate_list(
             try:
                 final_ipv4_config = dev.http_get_config_json(dev.JSON_CONFIG_IP)['ipv4']
                 final_misc_status = dev.http_get_status_json(DeployDev.JSON_STATUS_MISC)['misc']
-                log.info(f"Device {dev.host} (final check) has hostname '{final_ipv4_config['hostname']}' and FW Version {final_misc_status['firm_v']}")
+                log.info(f"[{ip}] Device {dev.host} (final check) has hostname '{final_ipv4_config['hostname']}' and FW Version {final_misc_status['firm_v']}")
                 # Update final_firmware if it changed due to config/ssl reboot and wasn't from fw update
                 if result.final_firmware == result.initial_firmware or result.final_firmware is None: # only if not set by fw update
                     if final_misc_status['firm_v'] != result.initial_firmware:
@@ -705,7 +709,6 @@ def iterate_list(
         })
         return result
 
-    concurrency = int(getattr(_args, 'device_concurrency', 1) or 1)
     if concurrency <= 1:
         for ip_str_or_obj in _ip_list:
             results.append(_process_device(ip_str_or_obj))

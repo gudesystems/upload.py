@@ -57,22 +57,22 @@ class DeployDev(HttpDevice):
         return cfg_filename
 
     def threaded_upload(self):
-        log.info(f"uploading {len(self.fw)} bytes...")
+        log.info(f"[{self.host}] uploading {len(self.fw)} bytes...")
         try:
             # This call is specifically for firmware
             self.upload_file(self.fw, self.CGI_UPLOAD_TYPE_FIRMWARE, timeout=300.0)
-            log.info(f"upload_file call completed for firmware.")
+            log.info(f"[{self.host}] upload_file call completed for firmware.")
         except requests.exceptions.ConnectionError as e:
-            log.warning(f"ConnectionError during firmware upload_file call: {e}. Device might still process the file.")
+            log.warning(f"[{self.host}] ConnectionError during firmware upload_file call: {e}. Device might still process the file.")
             self.firmware_upload_connection_error_info = str(e) # Store specific info
         except Exception as e:
-            log.error(f"Other exception during firmware upload_file call: {e}")
+            log.error(f"[{self.host}] Other exception during firmware upload_file call: {e}")
             self.firmware_upload_connection_error_info = f"Other upload error: {str(e)}"
         finally:
-            log.info(f"Threaded firmware upload processing finished, setting self.fw to None.")
+            log.info(f"[{self.host}] Threaded firmware upload processing finished, setting self.fw to None.")
             self.fw = None # Ensure this is always set to allow main thread to proceed
 
-    def update_firmware(self, device_data, cfg, fw_dir='fw', forced=False, online_update=False):
+    def update_firmware(self, device_data, cfg, fw_dir='fw', forced=False, online_update=False, show_progress_bar=True):
         prodid = device_data['prodid']
         dev_version = device_data['firm_v']
         initial_dev_version = dev_version # Store initial version for reporting
@@ -87,7 +87,7 @@ class DeployDev(HttpDevice):
                 url = f"{cfg['url']['basepath']}/{cfg[prodid]['subpath']}/{cfg[prodid]['json']}"
             else:
                 url = f"{cfg['url']['basepath']}/{cfg[prodid]['json']}"
-            log.info(f"downloading {url}")
+            log.info(f"[{self.host}] downloading {url}")
             latest_version = requests.get(url).json()[0]['version']
         else:
             latest_version = cfg[prodid]['version']
@@ -122,7 +122,7 @@ class DeployDev(HttpDevice):
                     url = f"{cfg['url']['basepath']}/{cfg[prodid]['subpath']}/{fw_filename}"
                 else:
                     url = f"{cfg['url']['basepath']}/{fw_filename}"
-                log.info(f"downloading {url}")
+                log.info(f"[{self.host}] downloading {url}")
                 r = requests.get(url)
                 if r.status_code == 200:
                     # ensure target directory exists before writing the file
@@ -139,13 +139,23 @@ class DeployDev(HttpDevice):
             else:
                 raise ValueError(f"Firmware file not found (offline): {local_filename}")
 
-        log.info(f"updating to Firmware v{latest_version}")
+        log.info(f"[{self.host}] updating to Firmware v{latest_version}")
 
         fw_content = self.get_file_content(local_filename, "rb")
         if fw_content is None: # Should be caught by ValueError above if file not found
              raise ValueError(f"Could not read firmware file content: {local_filename}")
         
-        log.info(f"uploading {fw_filename}, please wait...")
+        log.info(f"[{self.host}] uploading {fw_filename}, please wait...")
+
+        self.fw = fw_content # Set self.fw for the thread
+
+        log.info(f"[{self.host}] updating to Firmware v{latest_version}")
+
+        fw_content = self.get_file_content(local_filename, "rb")
+        if fw_content is None: # Should be caught by ValueError above if file not found
+             raise ValueError(f"Could not read firmware file content: {local_filename}")
+        
+        log.info(f"[{self.host}] uploading {fw_filename}, please wait...")
 
         self.fw = fw_content # Set self.fw for the thread
 
@@ -155,6 +165,7 @@ class DeployDev(HttpDevice):
         time.sleep(2)
 
         upload_status_after_thread = None
+        last_logged_progress = None
         while self.fw is not None:
             try:
                 upload_status = self.http_get_status_json(DeployDev.JSON_STATUS_UPLOAD)['fileupload']
@@ -164,10 +175,16 @@ class DeployDev(HttpDevice):
                 # p = (100 / total) * progress
                 # log.info(f"upload progress {p:02.2f}% {upload_status['progress']}/{total}")
 
-                print_progress_bar(progress, total, fill='#', clear=' ', unit='bytes')
+                if show_progress_bar:
+                    print_progress_bar(progress, total, fill='#', clear=' ', unit='bytes')
+                else:
+                    p = (100 / total) * progress if total > 0 else 0
+                    if last_logged_progress is None or p - last_logged_progress >= 20:
+                         log.info(f"[{self.host}] Upload progress: {p:.0f}%")
+                         last_logged_progress = p
 
                 if upload_status['checking']:
-                    log.info(f"upload complete, device is checking file consistency...")
+                    log.info(f"[{self.host}] upload complete, device is checking file consistency...")
                     time.sleep(5)
             except (requests.exceptions.RequestException, ValueError) as e:
                 log.warning(f"Could not get upload status during firmware update: {e}. Continuing...")
@@ -182,7 +199,6 @@ class DeployDev(HttpDevice):
         else:
             log.debug("Firmware upload thread has joined.")
 
-        # Thread has finished (self.fw is None)
         # Get final upload status if possible, or use last known
         try:
             upload_status_final_check = self.http_get_status_json(DeployDev.JSON_STATUS_UPLOAD)['fileupload']
@@ -197,10 +213,10 @@ class DeployDev(HttpDevice):
             to_v = upload_status_after_thread['update']['to']
             fw_versions_log_info = f"{from_v[1]}.{from_v[2]}.{from_v[3]} -> {to_v[1]}.{to_v[2]}.{to_v[3]}"
 
-        log.info(f"Firmware update based on device status: {fw_versions_log_info}, "
+        log.info(f"[{self.host}] Firmware update based on device status: {fw_versions_log_info}, "
                  f"device is rebooting to extract firmware file, please wait...")
         
-        reboot_successful = self.reboot(wait_reboot=True, max_wait_secs=85)
+        reboot_successful = self.reboot(wait_reboot=True, max_wait_secs=85, show_progress_bar=show_progress_bar)
 
         new_actual_version = initial_dev_version # Default to old if reboot fails or version can't be read
         is_successful_fw_update = False
@@ -212,7 +228,7 @@ class DeployDev(HttpDevice):
                 # Fetch fresh device info after reboot
                 misc_info_after_reboot = self.http_get_status_json(DeployDev.JSON_STATUS_MISC)['misc']
                 new_actual_version = misc_info_after_reboot['firm_v']
-                log.info(f"Device rebooted. Current firmware version: {new_actual_version}")
+                log.info(f"[{self.host}] Device rebooted. Current firmware version: {new_actual_version}")
 
                 # Determine if update was successful based on version comparison
                 expected_target_version = latest_version
@@ -248,29 +264,29 @@ class DeployDev(HttpDevice):
             "upload_notes": upload_notes_message
         }
 
-    def upload_config(self, cfg_file_name, config_ip):
+    def upload_config(self, cfg_file_name, config_ip, show_progress_bar=True):
         cfg = self.get_file_content(cfg_file_name)
         if cfg is None:
             return
-        log.info(f"uploading {cfg_file_name}, please wait...")
+        log.info(f"[{self.host}] uploading {cfg_file_name}, please wait...")
         self.upload_file(cfg, self.CGI_UPLOAD_TYPE_CONFIG)
-        log.info(f"upload complete, device is rebooting to apply config file, please wait...")
-        self.reboot(wait_reboot=False)
+        log.info(f"[{self.host}] upload complete, device is rebooting to apply config file, please wait...")
+        self.reboot(wait_reboot=False, show_progress_bar=show_progress_bar)
         if config_ip is not None:
             self.host = config_ip
-        self.wait_reboot(max_wait_secs=25)
+        self.wait_reboot(max_wait_secs=25, show_progress_bar=show_progress_bar)
 
         # apply every 'port X state set Y' by http
         for port, state in re.findall(r'port (\d+) state set (\d)', cfg):
             new_sate = self.http_switch_port(int(port), int(state))['outputs'][int(port) - 1]['state']
-            log.info(f"cmd 'port {port} state set {state}' -> '{new_sate}' (sleeping 1s)")
+            log.info(f"[{self.host}] cmd 'port {port} state set {state}' -> '{new_sate}' (sleeping 1s)")
             time.sleep(1)
 
-    def upload_ssl_certificate(self, ssl_cert_file_name):
+    def upload_ssl_certificate(self, ssl_cert_file_name, show_progress_bar=True):
         cert = self.get_file_content(ssl_cert_file_name)
         if cert is None:
             return
-        log.info(f"uploading {ssl_cert_file_name}, please wait...")
+        log.info(f"[{self.host}] uploading {ssl_cert_file_name}, please wait...")
         self.upload_file(cert, self.CGI_UPLOAD_TYPE_SSL_CERT)
-        log.info(f"upload complete, device is rebooting to apply cert file, please wait...")
-        self.reboot(wait_reboot=True, max_wait_secs=10)
+        log.info(f"[{self.host}] upload complete, device is rebooting to apply cert file, please wait...")
+        self.reboot(wait_reboot=True, max_wait_secs=10, show_progress_bar=show_progress_bar)

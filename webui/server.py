@@ -8,6 +8,9 @@ from urllib.parse import urlparse
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Optional, List
+import logging
+
+log = logging.getLogger("webui")
 
 """
 Web UI server for the gude uploader.
@@ -95,6 +98,15 @@ class Handler(BaseHTTPRequestHandler):
             for k, v in headers.items():
                 self.send_header(k, v)
         self.end_headers()
+
+    def log_message(self, format, *args):
+        # Suppress /api/devices logs by moving them to DEBUG level
+        if args and args[0].startswith("GET /api/devices"):
+            log.debug("%s %s" % (self.address_string(), format % args))
+            return
+        
+        # Use standard logging for other requests
+        log.info("%s %s" % (self.address_string(), format % args))
 
     def do_GET(self):
         parsed = urlparse(self.path)
