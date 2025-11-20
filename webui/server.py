@@ -30,7 +30,9 @@ from upload import run_processing_from_options, DeviceResult
 
 class State:
     running: bool = False
+    running: bool = False
     results: List[DeviceResult] = []
+    progress: dict = {}
 
 def _base_dir() -> Path:
     """Return directory containing index.html/assets, both in src and frozen builds."""
@@ -58,6 +60,7 @@ def _json_default(obj):
 def _run_gbl_query_async():
     try:
         State.running = True
+        State.progress = {}
         State.results = run_processing_from_options(
             gbl=True,
             status=True,
@@ -73,6 +76,17 @@ def _run_gbl_query_async():
 def _run_update_selected_async(hosts: list[str]):
     try:
         State.running = True
+        State.progress = {}
+        
+        def on_progress(evt):
+            # evt: { "ip": ..., "type": "progress", "progress": 50, "status": ... }
+            if evt.get("type") == "progress":
+                ip = evt.get("ip")
+                if ip:
+                    if ip not in State.progress:
+                        State.progress[ip] = {}
+                    State.progress[ip].update(evt)
+
         # Build devices mapping like: { 'hosts': { 'ip1': 'host:port', 'ip2': 'host:port', ... } }
         devices = {'hosts': {}}
         for idx, h in enumerate(hosts, start=1):
@@ -86,7 +100,8 @@ def _run_update_selected_async(hosts: list[str]):
             forcefw=True,
             status=False,
             gbl=False,
-            device_concurrency=2
+            device_concurrency=2,
+            progress_cb=on_progress
         )
     finally:
         State.running = False
@@ -95,6 +110,7 @@ def _run_update_selected_async(hosts: list[str]):
 def _run_status_selected_async(hosts: list[str]):
     try:
         State.running = True
+        State.progress = {}
         # Build devices mapping like: { 'hosts': { 'ip1': 'host:port', 'ip2': 'host:port', ... } }
         devices = {'hosts': {}}
         for idx, h in enumerate(hosts, start=1):
@@ -204,7 +220,9 @@ class Handler(BaseHTTPRequestHandler):
     def _api_devices(self):
         payload = {
             'running': State.running,
+            'running': State.running,
             'results': [asdict(r) for r in State.results],
+            'progress': State.progress,
         }
         data = json.dumps(payload, default=_json_default).encode('utf-8')
         self._send(200, {"Content-Type": "application/json; charset=utf-8"})

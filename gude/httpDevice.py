@@ -235,10 +235,15 @@ class HttpDevice(DeviceValues):
         self.allStatusJson = None
         self.entities = None
 
-    def wait_reboot(self, max_wait_secs=20.0, pre_wait_secs=5.0, req_headers=None, show_progress_bar=True):
+    def wait_reboot(self, max_wait_secs=20.0, pre_wait_secs=5.0, req_headers=None, show_progress_bar=True, progress_cb=None):
         total = int(pre_wait_secs) + int(max_wait_secs)
         for i in range(0, int(pre_wait_secs)):
             # log.info(".")
+            
+            if progress_cb:
+                pct = (100 / total) * i if total > 0 else 0
+                progress_cb({"ip": self.host, "type": "progress", "progress": pct, "status": f"Rebooting {i}/{total}s"})
+
             if show_progress_bar:
                 print_progress_bar(i, total, fill='#', clear=' ', unit='seconds')
             else:
@@ -258,6 +263,11 @@ class HttpDevice(DeviceValues):
                 retries -= 1
                 # log.info(".")
                 current_sec = int(pre_wait_secs) + max_wait_secs - retries
+                
+                if progress_cb:
+                    pct = (100 / total) * current_sec if total > 0 else 0
+                    progress_cb({"ip": self.host, "type": "progress", "progress": pct, "status": f"Rebooting {current_sec}/{total}s"})
+
                 if show_progress_bar:
                     print_progress_bar(current_sec, total, fill='#', clear=' ',
                                        unit='seconds')
@@ -268,29 +278,29 @@ class HttpDevice(DeviceValues):
         log.error(f"[{self.host}] ERROR: no reply, giving up")
         return False
 
-    def reboot_cmd(self, cmd, wait_reboot=False, max_wait_secs=20.0, req_headers=None, show_progress_bar=True):
+    def reboot_cmd(self, cmd, wait_reboot=False, max_wait_secs=20.0, req_headers=None, show_progress_bar=True, progress_cb=None):
         self.http_cgi_json_cmd(cmd, req_headers)
         if wait_reboot:
-            return self.wait_reboot(max_wait_secs, show_progress_bar=show_progress_bar)
+            return self.wait_reboot(max_wait_secs, show_progress_bar=show_progress_bar, progress_cb=progress_cb)
         else:
             return True
 
     #
     # reboot device to Fab Defaults
     #
-    def reboot_fab(self, wait_reboot=True, show_progress_bar=True):
+    def reboot_fab(self, wait_reboot=True, show_progress_bar=True, progress_cb=None):
         log.info(f"[{self.host}] Reboot to FabSettings...")
         self.flush_config_buffer()
-        ret = self.reboot_cmd(self.CGI_CMD_RESET_TO_FAB, wait_reboot, show_progress_bar=show_progress_bar)
+        ret = self.reboot_cmd(self.CGI_CMD_RESET_TO_FAB, wait_reboot, show_progress_bar=show_progress_bar, progress_cb=progress_cb)
         return ret
 
     #
     # reboot device
     #
-    def reboot(self, wait_reboot=True, max_wait_secs=20, show_progress_bar=True):
+    def reboot(self, wait_reboot=True, max_wait_secs=20, show_progress_bar=True, progress_cb=None):
         log.info(f"[{self.host}] Rebooting...")
         self.flush_config_buffer()
-        ret = self.reboot_cmd(self.CGI_CMD_RESET, wait_reboot, max_wait_secs, show_progress_bar=show_progress_bar)
+        ret = self.reboot_cmd(self.CGI_CMD_RESET, wait_reboot, max_wait_secs, show_progress_bar=show_progress_bar, progress_cb=progress_cb)
         return ret
 
     #

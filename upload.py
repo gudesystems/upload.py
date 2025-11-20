@@ -636,7 +636,7 @@ def iterate_list(
                                                            _config.get('defaults', 'fwdir', fallback='fw'),
                                                            forced=_args.forcefw,
                                                            online_update=_args.onlineupdate,
-                                                           show_progress_bar=use_progress_bar)
+                                                           show_progress_bar=use_progress_bar, progress_cb=emit)
 
                     result.final_firmware = fw_update_result.get("final_version", result.initial_firmware)
                     result.firmware_status = fw_update_result.get("status_message", "firmware update status unknown")
@@ -652,7 +652,7 @@ def iterate_list(
             if cfg_filename is not None:
                 log.debug(f"Attempting to upload configuration {cfg_filename} to {ip}...")
                 try:
-                    dev.upload_config(cfg_filename, _args.configip, show_progress_bar=use_progress_bar)
+                    dev.upload_config(cfg_filename, _args.configip, show_progress_bar=use_progress_bar, progress_cb=emit)
                     log.info(f"[{ip}] Successfully uploaded configuration {cfg_filename}.")
                 except Exception as e_cfg:
                     log.error(f"Failed to upload configuration {cfg_filename} to {ip}: {e_cfg}")
@@ -664,7 +664,7 @@ def iterate_list(
             if ssl_cert_filename is not None:
                 log.debug(f"Attempting to upload SSL certificate {ssl_cert_filename} to {ip}...")
                 try:
-                    dev.upload_ssl_certificate(ssl_cert_filename, show_progress_bar=use_progress_bar)
+                    dev.upload_ssl_certificate(ssl_cert_filename, show_progress_bar=use_progress_bar, progress_cb=emit)
                     log.info(f"[{ip}] Successfully uploaded SSL certificate {ssl_cert_filename}.")
                 except Exception as e_ssl:
                     log.error(f"Failed to upload SSL certificate {ssl_cert_filename} to {ip}: {e_ssl}")

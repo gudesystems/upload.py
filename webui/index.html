@@ -77,6 +77,31 @@
       justify-content: flex-end;
       gap: .5rem;
     }
+
+    /* Spinner */
+    .spinner {
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #3498db;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      animation: spin 1s linear infinite;
+      display: none;
+    }
+
+    @keyframes spin {
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+
+    .spinner.visible {
+      display: inline-block;
+    }
   </style>
 </head>
 
@@ -477,6 +502,13 @@
           container.appendChild(searchBtn);
           container.appendChild(runBtn);
           container.appendChild(updBtn);
+
+          // Spinner
+          var spinDiv = document.createElement('div');
+          spinDiv.id = 'globalSpinner';
+          spinDiv.className = 'spinner ms-2';
+          container.appendChild(spinDiv);
+
           // Wire events (functions can be defined elsewhere)
           searchBtn.addEventListener('click', runFind);
           runBtn.addEventListener('click', runRefresh);
@@ -492,33 +524,68 @@
     async function fetchDevices() {
       const res = await fetch('/api/devices');
       const data = await res.json();
-      render(data.results || []);
+
+      // Merge progress into results or handle separately
+      const progressMap = data.progress || {};
+      const results = data.results || [];
+
+      // Update results with progress info if running
+      results.forEach(r => {
+        const key = r.ip; // IP is key in progress map
+        if (progressMap[key]) {
+          const prog = progressMap[key];
+          if (prog.status && String(prog.status).startsWith('Rebooting')) {
+            r.firmware_status = prog.status;
+            r.firmware_upload_notes = '';
+          } else if (prog.progress < 100) {
+            r.firmware_status = `Uploading ${Math.round(prog.progress)}%`;
+            r.firmware_upload_notes = prog.status || 'uploading';
+          } else if (prog.status === 'checking') {
+            r.firmware_status = 'Checking...';
+          }
+        }
+      });
+
+      render(results);
+      updateSpinner(data.running);
       return data.running;
+    }
+
+    function updateSpinner(isRunning) {
+      const s = document.getElementById('globalSpinner');
+      if (s) {
+        if (isRunning) s.classList.add('visible');
+        else s.classList.remove('visible');
+      }
+      // Also update buttons state if needed, though they might be handled by run* functions locally
+      // run* functions disable them, but if we refresh page while running, we want them disabled?
+      // For now relying on run* functions for button state, spinner for global status.
+      const btns = ['findBtn', 'refreshBtn', 'updateBtn'];
+      btns.forEach(bid => {
+        const b = document.getElementById(bid);
+        if (b) b.disabled = isRunning;
+      });
     }
 
     async function runFind() {
       try {
-        const btn = document.getElementById('findBtn');
-        if (btn) btn.disabled = true;
+        // const btn = document.getElementById('findBtn');
+        // if (btn) btn.disabled = true; 
+        // Managed by updateSpinner now to persist state across polls
         await fetch('/api/run');
         let running = true;
         while (running) {
           running = await fetchDevices();
-          await new Promise(r => setTimeout(r, 1500));
+          await new Promise(r => setTimeout(r, 1000));
         }
       } catch (e) {
         console.error(e);
-      } finally {
-        const btn = document.getElementById('findBtn');
-        if (btn) btn.disabled = false;
       }
+      // Finally block removed as updateSpinner handles enabling via polling result
     }
 
     async function runRefresh() {
       try {
-        const btn = document.getElementById('refreshBtn');
-        if (btn) btn.disabled = true;
-
         const hosts = Array.from(selectedKeys);
         if (hosts.length > 0) {
           // Run status check for selected devices
@@ -535,26 +602,20 @@
         let running = true;
         while (running) {
           running = await fetchDevices();
-          await new Promise(r => setTimeout(r, 1500));
+          await new Promise(r => setTimeout(r, 1000));
         }
       } catch (e) {
         console.error(e);
-      } finally {
-        const btn = document.getElementById('refreshBtn');
-        if (btn) btn.disabled = false;
       }
     }
 
     async function runUpdate() {
       try {
-        const btn = document.getElementById('updateBtn');
-        if (!btn) return;
         const hosts = Array.from(selectedKeys);
         if (hosts.length === 0) {
           alert('Please select at least one device.');
           return;
         }
-        btn.disabled = true;
         await fetch('/api/update', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -563,14 +624,11 @@
         let running = true;
         while (running) {
           running = await fetchDevices();
-          await new Promise(r => setTimeout(r, 1500));
+          await new Promise(r => setTimeout(r, 1000));
         }
       } catch (e) {
         console.error(e);
         alert('Update request failed. See console for details.');
-      } finally {
-        const btn = document.getElementById('updateBtn');
-        if (btn) btn.disabled = false;
       }
     }
 
