@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html data-bs-theme="light" lang="en-US" dir="ltr">
+
 <head>
   <meta charset="utf-8" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
@@ -11,41 +12,79 @@
   <link href="/assets/user.min.css" rel="stylesheet" id="user-style-default" />
   <script src="/assets/config.js"></script>
   <style>
-    .logo{background-image:url('/assets/gude_only-logo.svg');background-repeat:no-repeat;background-position:left center;background-size:contain;}
-    .nav-link-icon svg { width: 18px; height: 18px; display: inline-block; }
-    html.navbar-vertical-collapsed .sidebar-meta { display: none !important; }
+    .logo {
+      background-image: url('/assets/gude.svg');
+      background-repeat: no-repeat;
+      background-position: left center;
+      background-size: contain;
+    }
+
+    .nav-link-icon svg {
+      width: 18px;
+      height: 18px;
+      display: inline-block;
+    }
+
+    html.navbar-vertical-collapsed .sidebar-meta {
+      display: none !important;
+    }
+
     /* Top/Bottom rows spacing and alignment */
-    .dataTables_wrapper .dt-top { margin-bottom: .75rem !important; }
-    .dataTables_wrapper .dt-bottom { margin-top: .75rem !important; align-items: center; }
+    .dataTables_wrapper .dt-top {
+      margin-bottom: .75rem !important;
+    }
+
+    .dataTables_wrapper .dt-bottom {
+      margin-top: .75rem !important;
+      align-items: center;
+    }
+
     /* Align DataTables filter row content and unify control heights */
     div.dataTables_wrapper div.dataTables_filter {
       display: flex;
       align-items: center;
-      justify-content: flex-start; /* filter on the left */
-      gap: .5rem; /* even spacing between input and buttons */
+      justify-content: flex-start;
+      /* filter on the left */
+      gap: .5rem;
+      /* even spacing between input and buttons */
     }
-    div.dataTables_wrapper div.dataTables_filter label { margin: 0; }
+
+    div.dataTables_wrapper div.dataTables_filter label {
+      margin: 0;
+    }
+
     /* Match button height to search input for visual alignment */
     div.dataTables_wrapper div.dataTables_filter input[type="search"] {
       height: 32px;
     }
+
     .dt-toolbar-btn {
       height: 32px;
-      padding: .125rem .5rem; /* tight vertical, comfy horizontal */
+      padding: .125rem .5rem;
+      /* tight vertical, comfy horizontal */
       display: inline-flex;
       align-items: center;
-      white-space: nowrap; /* prevent label wrapping */
-      flex: 0 0 auto; /* do not shrink and force line-breaks */
+      white-space: nowrap;
+      /* prevent label wrapping */
+      flex: 0 0 auto;
+      /* do not shrink and force line-breaks */
     }
-    .dt-top-actions { display: flex; align-items: center; justify-content: flex-end; gap: .5rem; }
+
+    .dt-top-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: .5rem;
+    }
   </style>
 </head>
+
 <body>
   <main class="main" id="top">
     <div class="container" data-layout="container">
       <script>
         var isFluid = JSON.parse(localStorage.getItem('isFluid'));
-        if(isFluid) {
+        if (isFluid) {
           var container = document.querySelector('[data-layout]');
           container.classList.remove('container');
           container.classList.add('container-fluid');
@@ -60,7 +99,9 @@
             </button>
           </div>
           <a class="navbar-brand" href="#" style="width:100%">
-            <div class="d-flex align-items-center py-3 navbar-brand-top-height" style="width:148px;"><div class="logo"></div></div>
+            <div class="d-flex align-items-center py-3 navbar-brand-top-height" style="width:148px;">
+              <div class="logo"></div>
+            </div>
           </a>
         </div>
         <div class="collapse navbar-collapse show" id="navbarVerticalCollapse">
@@ -70,7 +111,11 @@
                 <a class="nav-link active" href="#" role="button">
                   <div class="d-flex align-items-center">
                     <span class="nav-link-icon">
-                      <svg class="svg-h-9 svg-align-text fas" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M464 32H48C21.49 32 0 53.49 0 80v352c0 26.51 21.49 48 48 48h416c26.51 0 48-21.49 48-48V80c0-26.51-21.49-48-48-48zM224 416H64v-96h160v96zm0-160H64v-96h160v96zm224 160H288v-96h160v96zm0-160H288v-96h160v96z"></path></svg>
+                      <svg class="svg-h-9 svg-align-text fas" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+                        <path fill="currentColor"
+                          d="M464 32H48C21.49 32 0 53.49 0 80v352c0 26.51 21.49 48 48 48h416c26.51 0 48-21.49 48-48V80c0-26.51-21.49-48-48-48zM224 416H64v-96h160v96zm0-160H64v-96h160v96zm224 160H288v-96h160v96zm0-160H288v-96h160v96z">
+                        </path>
+                      </svg>
                     </span>
                     <span class="nav-link-text ps-1">Devices</span>
                   </div>
@@ -79,20 +124,30 @@
               <li class="nav-item">
                 <div class="row navbar-vertical-label-wrapper mt-3 mb-2">
                   <div class="col-auto navbar-vertical-label fw-bold">Support</div>
-                  <div class="col ps-0"><hr class="mb-0 navbar-vertical-divider"></div>
+                  <div class="col ps-0">
+                    <hr class="mb-0 navbar-vertical-divider">
+                  </div>
                 </div>
-                <a class="nav-link" href="https://github.com/gudesystems/upload.py" target="_blank" rel="noopener" role="button">
+                <a class="nav-link" href="https://github.com/gudesystems/upload.py" target="_blank" rel="noopener"
+                  role="button">
                   <div class="d-flex align-items-center">
                     <span class="nav-link-icon">
-                      <svg class="svg-h-9 svg-align-text fas" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><path fill="currentColor" d="M320 32C193 32 96 129 96 256c0 99.9 64.5 184.4 154 214.3 11.3 2.1 15.5-4.9 15.5-10.9 0-5.4-.2-23.1-.3-41.9-62.7 13.6-75.9-26.3-75.9-26.3-10.3-26.2-25.1-33.2-25.1-33.2-20.5-14 1.6-13.7 1.6-13.7 22.7 1.6 34.6 23.3 34.6 23.3 20.1 34.5 52.7 24.5 65.6 18.7 2-14.6 7.9-24.5 14.3-30.1-50-5.7-102.6-25-102.6-111.3 0-24.6 8.8-44.6 23.2-60.3-2.3-5.7-10.1-28.6 2.2-59.6 0 0 19-6.1 62.4 23 18.1-5 37.5-7.5 56.9-7.6 19.3.1 38.8 2.6 56.9 7.6 43.4-29.1 62.4-23 62.4-23 12.3 31 4.5 53.9 2.2 59.6 14.4 15.7 23.2 35.7 23.2 60.3 0 86.5-52.7 105.5-102.9 111 8.1 7 15.4 20.6 15.4 41.5 0 29.9-.3 54-.3 61.3 0 6 4.1 13.1 15.6 10.9C479.5 440.4 544 355.9 544 256 544 129 447 32 320 32z"/></svg>
+                      <svg class="svg-h-9 svg-align-text fas" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512">
+                        <path fill="currentColor"
+                          d="M320 32C193 32 96 129 96 256c0 99.9 64.5 184.4 154 214.3 11.3 2.1 15.5-4.9 15.5-10.9 0-5.4-.2-23.1-.3-41.9-62.7 13.6-75.9-26.3-75.9-26.3-10.3-26.2-25.1-33.2-25.1-33.2-20.5-14 1.6-13.7 1.6-13.7 22.7 1.6 34.6 23.3 34.6 23.3 20.1 34.5 52.7 24.5 65.6 18.7 2-14.6 7.9-24.5 14.3-30.1-50-5.7-102.6-25-102.6-111.3 0-24.6 8.8-44.6 23.2-60.3-2.3-5.7-10.1-28.6 2.2-59.6 0 0 19-6.1 62.4 23 18.1-5 37.5-7.5 56.9-7.6 19.3.1 38.8 2.6 56.9 7.6 43.4-29.1 62.4-23 62.4-23 12.3 31 4.5 53.9 2.2 59.6 14.4 15.7 23.2 35.7 23.2 60.3 0 86.5-52.7 105.5-102.9 111 8.1 7 15.4 20.6 15.4 41.5 0 29.9-.3 54-.3 61.3 0 6 4.1 13.1 15.6 10.9C479.5 440.4 544 355.9 544 256 544 129 447 32 320 32z" />
+                      </svg>
                     </span>
                     <span class="nav-link-text ps-1">Online doc</span>
                   </div>
                 </a>
-                <a class="nav-link" href="https://github.com/gudesystems/upload.py/issues" target="_blank" rel="noopener" role="button">
+                <a class="nav-link" href="https://github.com/gudesystems/upload.py/issues" target="_blank"
+                  rel="noopener" role="button">
                   <div class="d-flex align-items-center">
                     <span class="nav-link-icon">
-                      <svg class="svg-h-9 svg-align-text fas" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M256 8C119 8 8 119 8 256s111 248 248 248 248-111 248-248S393 8 256 8zm0 110c23.2 0 42 18.8 42 42s-18.8 42-42 42-42-18.8-42-42 18.8-42 42-42zm56 272c0 6.6-5.4 12-12 12H212c-6.6 0-12-5.4-12-12v-24c0-6.6 5.4-12 12-12h12v-64h-12c-6.6 0-12-5.4-12-12v-24c0-6.6 5.4-12 12-12h72c6.6 0 12 5.4 12 12v100h12c6.6 0 12 5.4 12 12v24z"/></svg>
+                      <svg class="svg-h-9 svg-align-text fas" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+                        <path fill="currentColor"
+                          d="M256 8C119 8 8 119 8 256s111 248 248 248 248-111 248-248S393 8 256 8zm0 110c23.2 0 42 18.8 42 42s-18.8 42-42 42-42-18.8-42-42 18.8-42 42-42zm56 272c0 6.6-5.4 12-12 12H212c-6.6 0-12-5.4-12-12v-24c0-6.6 5.4-12 12-12h12v-64h-12c-6.6 0-12-5.4-12-12v-24c0-6.6 5.4-12 12-12h72c6.6 0 12 5.4 12 12v100h12c6.6 0 12 5.4 12 12v24z" />
+                      </svg>
                     </span>
                     <span class="nav-link-text ps-1">Issues</span>
                   </div>
@@ -112,7 +167,110 @@
         <!-- Top navbar with actions aligned with content -->
         <nav class="navbar navbar-light navbar-glass navbar-top navbar-expand">
           <div class="search-box d-none d-md-block" style="visibility:hidden"></div>
-          <ul class="navbar-nav navbar-nav-icons ms-auto flex-row align-items-center"><li class="nav-item ps-2 pe-0" data-bs-tooltip="tooltip" data-bs-placement="left" data-bs-original-title="Switch Theme"><div class="dropdown theme-control-dropdown"><a class="nav-link d-flex align-items-center dropdown-toggle fs-9 pe-1 py-0" href="#" role="button" id="themeSwitchDropdown" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false"><span data-theme-dropdown-toggle-icon="light" class=""><svg class="fas svg-h-7" aria-hidden="true" focusable="false" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M256 160c-52.9 0-96 43.1-96 96s43.1 96 96 96 96-43.1 96-96-43.1-96-96-96zm246.4 80.5l-94.7-47.3 33.5-100.4c4.5-13.6-8.4-26.5-21.9-21.9l-100.4 33.5-47.4-94.8c-6.4-12.8-24.6-12.8-31 0l-47.3 94.7L92.7 70.8c-13.6-4.5-26.5 8.4-21.9 21.9l33.5 100.4-94.7 47.4c-12.8 6.4-12.8 24.6 0 31l94.7 47.3-33.5 100.5c-4.5 13.6 8.4 26.5 21.9 21.9l100.4-33.5 47.3 94.7c6.4 12.8 24.6 12.8 31 0l47.3-94.7 100.4 33.5c13.6 4.5 26.5-8.4 21.9-21.9l-33.5-100.4 94.7-47.3c13-6.5 13-24.7.2-31.1zm-155.9 106c-49.9 49.9-131.1 49.9-181 0-49.9-49.9-49.9-131.1 0-181 49.9-49.9 131.1-49.9 181 0 49.9 49.9 49.9 131.1 0 181z"></path></svg></span><span data-theme-dropdown-toggle-icon="dark" class="d-none"><svg class="fas svg-h-8" focusable="false" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" aria-hidden="false"><path fill="currentColor" d="M283.211 512c78.962 0 151.079-35.925 198.857-94.792 7.068-8.708-.639-21.43-11.562-19.35-124.203 23.654-238.262-71.576-238.262-196.954 0-72.222 38.662-138.635 101.498-174.394 9.686-5.512 7.25-20.197-3.756-22.23A258.156 258.156 0 0 0 283.211 0c-141.309 0-256 114.511-256 256 0 141.309 114.511 256 256 256z"></path></svg></span><span data-theme-dropdown-toggle-icon="auto" class="d-none"><svg class="fas svg-h-7" aria-hidden="true" focusable="false" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M8 256c0 136.966 111.033 248 248 248s248-111.034 248-248S392.966 8 256 8 8 119.033 8 256zm248 184V72c101.705 0 184 82.311 184 184 0 101.705-82.311 184-184 184z"></path></svg></span></a><div class="dropdown-menu dropdown-menu-end dropdown-caret border py-0 mt-3" aria-labelledby="themeSwitchDropdown"><div class="bg-white dark__bg-1000 rounded-2 py-2"><button class="dropdown-item d-flex align-items-center gap-2 active" type="button" value="light" data-theme-control="theme"><svg class="fas svg-h-10" aria-hidden="true" focusable="false" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M256 160c-52.9 0-96 43.1-96 96s43.1 96 96 96 96-43.1 96-96-43.1-96-96-96zm246.4 80.5l-94.7-47.3 33.5-100.4c4.5-13.6-8.4-26.5-21.9-21.9l-100.4 33.5-47.4-94.8c-6.4-12.8-24.6-12.8-31 0l-47.3 94.7L92.7 70.8c-13.6-4.5-26.5 8.4-21.9 21.9l33.5 100.4-94.7 47.4c-12.8 6.4-12.8 24.6 0 31l94.7 47.3-33.5 100.5c-4.5 13.6 8.4 26.5 21.9 21.9l100.4-33.5 47.3 94.7c6.4 12.8 24.6 12.8 31 0l47.3-94.7 100.4 33.5c13.6 4.5 26.5-8.4 21.9-21.9l-33.5-100.4 94.7-47.3c13-6.5 13-24.7.2-31.1zm-155.9 106c-49.9 49.9-131.1 49.9-181 0-49.9-49.9-49.9-131.1 0-181 49.9-49.9 131.1-49.9 181 0 49.9 49.9 49.9 131.1 0 181z"></path></svg>Light<span class="fas fa-check dropdown-check-icon ms-auto text-600"></span></button><button class="dropdown-item d-flex align-items-center gap-2" type="button" value="dark" data-theme-control="theme"><svg class="fas svg-h-10" aria-hidden="true" focusable="false" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M283.211 512c78.962 0 151.079-35.925 198.857-94.792 7.068-8.708-.639-21.43-11.562-19.35-124.203 23.654-238.262-71.576-238.262-196.954 0-72.222 38.662-138.635 101.498-174.394 9.686-5.512 7.25-20.197-3.756-22.23A258.156 258.156 0 0 0 283.211 0c-141.309 0-256 114.511-256 256 0 141.309 114.511 256 256 256z"></path></svg>Dark<span class="fas fa-check dropdown-check-icon ms-auto text-600"></span></button><button class="dropdown-item d-flex align-items-center gap-2" type="button" value="auto" data-theme-control="theme"><svg class="fas svg-h-10" aria-hidden="true" focusable="false" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M8 256c0 136.966 111.033 248 248 248s248-111.034 248-248S392.966 8 256 8 8 119.033 8 256zm248 184V72c101.705 0 184 82.311 184 184 0 101.705-82.311 184-184 184z"></path></svg>Auto<span class="fas fa-check dropdown-check-icon ms-auto text-600"></span></button></div></div></div></li><li class="nav-item dropdown"><a class="nav-link notification-indicator notification-indicator-primary px-0" id="navbarDropdownNotification" role="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" data-hide-on-body-scroll="data-hide-on-body-scroll"><svg class="fas svg-h-7 mt2 me-1" aria-hidden="true" focusable="false" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path fill="currentColor" d="M224 512c35.32 0 63.97-28.65 63.97-64H160.03c0 35.35 28.65 64 63.97 64zm215.39-149.71c-19.32-20.76-55.47-51.99-55.47-154.29 0-77.7-54.48-139.9-127.94-155.16V32c0-17.67-14.32-32-31.98-32s-31.98 14.33-31.98 32v20.84C118.56 68.1 64.08 130.3 64.08 208c0 102.3-36.15 133.53-55.47 154.29-6 6.45-8.66 14.16-8.61 21.71.11 16.4 12.98 32 32.1 32h383.8c19.12 0 32-15.6 32.1-32 .05-7.55-2.61-15.27-8.61-21.71z"></path></svg></a><div class="dropdown-menu dropdown-caret dropdown-menu-end dropdown-menu-card dropdown-menu-notification dropdown-caret-bg" aria-labelledby="navbarDropdownNotification"><div class="card card-notification shadow-none"><div class="card-header"><div class="row justify-content-between align-items-center"><div class="col-auto"><h6 class="card-header-title mb-0">Notifications / Alerts</h6></div><div class="col-auto ps-0 ps-sm-3"><a class="card-link fw-normal" href="#">Mark all as read</a></div></div></div><div class="scrollbar-overlay" style="max-height:19rem" data-simplebar><div class="list-group list-group-flush fw-normal fs-10"><div class="list-group-title border-bottom">NEW</div><div class="list-group-item"><a class="notification notification-flush notification-unread" href="#"><div class="notification-body"><p class="mb-1"><strong>Welcome</strong><br>No new notifications</p></div></a></div></div></div></div></div></li><li class="nav-item dropdown"><a class="nav-link pe-0" id="navbarDropdownUser" href="#" role="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false"><svg class="fas svg-h-7" aria-hidden="true" focusable="false" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path fill="currentColor" d="M224 256c70.7 0 128-57.3 128-128S294.7 0 224 0 96 57.3 96 128s57.3 128 128 128zm89.6 32h-11.8c-22 10.4-46.6 16-77.8 16-31.2 0-55.8-5.6-77.8-16h-11.8C57.3 288 0 345.3 0 416v32c0 35.3 28.7 64 64 64h320c35.3 0 64-28.7 64-64v-32c0-70.7-57.3-128-134.4-128z"></path></svg></a><div class="dropdown-menu dropdown-caret dropdown-menu-end dropdown-caret-bg" aria-labelledby="navbarDropdownUser"><div class="bg-white dark__bg-1000 rounded-2 py-2"><a class="dropdown-item" href="#">Profile</a><a class="dropdown-item" href="#">Settings</a><div class="dropdown-divider"></div><a class="dropdown-item" href="#">Logout</a></div></div></li></ul>
+          <ul class="navbar-nav navbar-nav-icons ms-auto flex-row align-items-center">
+            <li class="nav-item ps-2 pe-0" data-bs-tooltip="tooltip" data-bs-placement="left"
+              data-bs-original-title="Switch Theme">
+              <div class="dropdown theme-control-dropdown"><a
+                  class="nav-link d-flex align-items-center dropdown-toggle fs-9 pe-1 py-0" href="#" role="button"
+                  id="themeSwitchDropdown" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false"><span
+                    data-theme-dropdown-toggle-icon="light" class=""><svg class="fas svg-h-7" aria-hidden="true"
+                      focusable="false" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+                      <path fill="currentColor"
+                        d="M256 160c-52.9 0-96 43.1-96 96s43.1 96 96 96 96-43.1 96-96-43.1-96-96-96zm246.4 80.5l-94.7-47.3 33.5-100.4c4.5-13.6-8.4-26.5-21.9-21.9l-100.4 33.5-47.4-94.8c-6.4-12.8-24.6-12.8-31 0l-47.3 94.7L92.7 70.8c-13.6-4.5-26.5 8.4-21.9 21.9l33.5 100.4-94.7 47.4c-12.8 6.4-12.8 24.6 0 31l94.7 47.3-33.5 100.5c-4.5 13.6 8.4 26.5 21.9 21.9l100.4-33.5 47.3 94.7c6.4 12.8 24.6 12.8 31 0l47.3-94.7 100.4 33.5c13.6 4.5 26.5-8.4 21.9-21.9l-33.5-100.4 94.7-47.3c13-6.5 13-24.7.2-31.1zm-155.9 106c-49.9 49.9-131.1 49.9-181 0-49.9-49.9-49.9-131.1 0-181 49.9-49.9 131.1-49.9 181 0 49.9 49.9 49.9 131.1 0 181z">
+                      </path>
+                    </svg></span><span data-theme-dropdown-toggle-icon="dark" class="d-none"><svg class="fas svg-h-8"
+                      focusable="false" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"
+                      aria-hidden="false">
+                      <path fill="currentColor"
+                        d="M283.211 512c78.962 0 151.079-35.925 198.857-94.792 7.068-8.708-.639-21.43-11.562-19.35-124.203 23.654-238.262-71.576-238.262-196.954 0-72.222 38.662-138.635 101.498-174.394 9.686-5.512 7.25-20.197-3.756-22.23A258.156 258.156 0 0 0 283.211 0c-141.309 0-256 114.511-256 256 0 141.309 114.511 256 256 256z">
+                      </path>
+                    </svg></span><span data-theme-dropdown-toggle-icon="auto" class="d-none"><svg class="fas svg-h-7"
+                      aria-hidden="true" focusable="false" role="img" xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 512 512">
+                      <path fill="currentColor"
+                        d="M8 256c0 136.966 111.033 248 248 248s248-111.034 248-248S392.966 8 256 8 8 119.033 8 256zm248 184V72c101.705 0 184 82.311 184 184 0 101.705-82.311 184-184 184z">
+                      </path>
+                    </svg></span></a>
+                <div class="dropdown-menu dropdown-menu-end dropdown-caret border py-0 mt-3"
+                  aria-labelledby="themeSwitchDropdown">
+                  <div class="bg-white dark__bg-1000 rounded-2 py-2"><button
+                      class="dropdown-item d-flex align-items-center gap-2 active" type="button" value="light"
+                      data-theme-control="theme"><svg class="fas svg-h-10" aria-hidden="true" focusable="false"
+                        role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+                        <path fill="currentColor"
+                          d="M256 160c-52.9 0-96 43.1-96 96s43.1 96 96 96 96-43.1 96-96-43.1-96-96-96zm246.4 80.5l-94.7-47.3 33.5-100.4c4.5-13.6-8.4-26.5-21.9-21.9l-100.4 33.5-47.4-94.8c-6.4-12.8-24.6-12.8-31 0l-47.3 94.7L92.7 70.8c-13.6-4.5-26.5 8.4-21.9 21.9l33.5 100.4-94.7 47.4c-12.8 6.4-12.8 24.6 0 31l94.7 47.3-33.5 100.5c-4.5 13.6 8.4 26.5 21.9 21.9l100.4-33.5 47.3 94.7c6.4 12.8 24.6 12.8 31 0l47.3-94.7 100.4 33.5c13.6 4.5 26.5-8.4 21.9-21.9l-33.5-100.4 94.7-47.3c13-6.5 13-24.7.2-31.1zm-155.9 106c-49.9 49.9-131.1 49.9-181 0-49.9-49.9-49.9-131.1 0-181 49.9-49.9 131.1-49.9 181 0 49.9 49.9 49.9 131.1 0 181z">
+                        </path>
+                      </svg>Light<span class="fas fa-check dropdown-check-icon ms-auto text-600"></span></button><button
+                      class="dropdown-item d-flex align-items-center gap-2" type="button" value="dark"
+                      data-theme-control="theme"><svg class="fas svg-h-10" aria-hidden="true" focusable="false"
+                        role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+                        <path fill="currentColor"
+                          d="M283.211 512c78.962 0 151.079-35.925 198.857-94.792 7.068-8.708-.639-21.43-11.562-19.35-124.203 23.654-238.262-71.576-238.262-196.954 0-72.222 38.662-138.635 101.498-174.394 9.686-5.512 7.25-20.197-3.756-22.23A258.156 258.156 0 0 0 283.211 0c-141.309 0-256 114.511-256 256 0 141.309 114.511 256 256 256z">
+                        </path>
+                      </svg>Dark<span class="fas fa-check dropdown-check-icon ms-auto text-600"></span></button><button
+                      class="dropdown-item d-flex align-items-center gap-2" type="button" value="auto"
+                      data-theme-control="theme"><svg class="fas svg-h-10" aria-hidden="true" focusable="false"
+                        role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+                        <path fill="currentColor"
+                          d="M8 256c0 136.966 111.033 248 248 248s248-111.034 248-248S392.966 8 256 8 8 119.033 8 256zm248 184V72c101.705 0 184 82.311 184 184 0 101.705-82.311 184-184 184z">
+                        </path>
+                      </svg>Auto<span class="fas fa-check dropdown-check-icon ms-auto text-600"></span></button></div>
+                </div>
+              </div>
+            </li>
+            <li class="nav-item dropdown"><a class="nav-link notification-indicator notification-indicator-primary px-0"
+                id="navbarDropdownNotification" role="button" data-bs-toggle="dropdown" aria-haspopup="true"
+                aria-expanded="false" data-hide-on-body-scroll="data-hide-on-body-scroll"><svg
+                  class="fas svg-h-7 mt2 me-1" aria-hidden="true" focusable="false" role="img"
+                  xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512">
+                  <path fill="currentColor"
+                    d="M224 512c35.32 0 63.97-28.65 63.97-64H160.03c0 35.35 28.65 64 63.97 64zm215.39-149.71c-19.32-20.76-55.47-51.99-55.47-154.29 0-77.7-54.48-139.9-127.94-155.16V32c0-17.67-14.32-32-31.98-32s-31.98 14.33-31.98 32v20.84C118.56 68.1 64.08 130.3 64.08 208c0 102.3-36.15 133.53-55.47 154.29-6 6.45-8.66 14.16-8.61 21.71.11 16.4 12.98 32 32.1 32h383.8c19.12 0 32-15.6 32.1-32 .05-7.55-2.61-15.27-8.61-21.71z">
+                  </path>
+                </svg></a>
+              <div
+                class="dropdown-menu dropdown-caret dropdown-menu-end dropdown-menu-card dropdown-menu-notification dropdown-caret-bg"
+                aria-labelledby="navbarDropdownNotification">
+                <div class="card card-notification shadow-none">
+                  <div class="card-header">
+                    <div class="row justify-content-between align-items-center">
+                      <div class="col-auto">
+                        <h6 class="card-header-title mb-0">Notifications / Alerts</h6>
+                      </div>
+                      <div class="col-auto ps-0 ps-sm-3"><a class="card-link fw-normal" href="#">Mark all as read</a>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="scrollbar-overlay" style="max-height:19rem" data-simplebar>
+                    <div class="list-group list-group-flush fw-normal fs-10">
+                      <div class="list-group-title border-bottom">NEW</div>
+                      <div class="list-group-item"><a class="notification notification-flush notification-unread"
+                          href="#">
+                          <div class="notification-body">
+                            <p class="mb-1"><strong>Welcome</strong><br>No new notifications</p>
+                          </div>
+                        </a></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </li>
+            <li class="nav-item dropdown"><a class="nav-link pe-0" id="navbarDropdownUser" href="#" role="button"
+                data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false"><svg class="fas svg-h-7"
+                  aria-hidden="true" focusable="false" role="img" xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 448 512">
+                  <path fill="currentColor"
+                    d="M224 256c70.7 0 128-57.3 128-128S294.7 0 224 0 96 57.3 96 128s57.3 128 128 128zm89.6 32h-11.8c-22 10.4-46.6 16-77.8 16-31.2 0-55.8-5.6-77.8-16h-11.8C57.3 288 0 345.3 0 416v32c0 35.3 28.7 64 64 64h320c35.3 0 64-28.7 64-64v-32c0-70.7-57.3-128-134.4-128z">
+                  </path>
+                </svg></a>
+              <div class="dropdown-menu dropdown-caret dropdown-menu-end dropdown-caret-bg"
+                aria-labelledby="navbarDropdownUser">
+                <div class="bg-white dark__bg-1000 rounded-2 py-2"><a class="dropdown-item" href="#">Profile</a><a
+                    class="dropdown-item" href="#">Settings</a>
+                  <div class="dropdown-divider"></div><a class="dropdown-item" href="#">Logout</a>
+                </div>
+              </div>
+            </li>
+          </ul>
         </nav>
         <div class="card mb-3">
           <div class="card-header d-flex flex-between-center">
@@ -123,7 +281,8 @@
               <table id="devicesTable" class="table table-striped mb-0">
                 <thead>
                   <tr>
-                    <th style="width:1%; text-align:center;"><input type="checkbox" id="selectAll" aria-label="Select all" /></th>
+                    <th style="width:1%; text-align:center;"><input type="checkbox" id="selectAll"
+                        aria-label="Select all" /></th>
                     <th>Status</th>
                     <th>IP</th>
                     <th>Product</th>
@@ -151,28 +310,28 @@
   <script src="/assets/dataTables.bootstrap5.min.js"></script>
   <script>
     // Fallback wiring for theme dropdown (mirrors template behavior)
-    (function(){
-      function applyTheme(mode){
+    (function () {
+      function applyTheme(mode) {
         localStorage.setItem('theme', mode);
         var html = document.documentElement;
-        if(mode === 'auto'){
+        if (mode === 'auto') {
           var mql = window.matchMedia('(prefers-color-scheme: dark)');
           html.setAttribute('data-bs-theme', mql.matches ? 'dark' : 'light');
         } else {
           html.setAttribute('data-bs-theme', mode);
         }
         // Toggle active state in dropdown
-        document.querySelectorAll('[data-theme-control="theme"]').forEach(function(btn){
+        document.querySelectorAll('[data-theme-control="theme"]').forEach(function (btn) {
           btn.classList.toggle('active', btn.value === mode);
         });
         // Toggle dropdown icon
-        ['light','dark','auto'].forEach(function(k){
-          var el = document.querySelector('[data-theme-dropdown-toggle-icon="'+k+'"]');
-          if(el){ el.classList.toggle('d-none', k !== mode); }
+        ['light', 'dark', 'auto'].forEach(function (k) {
+          var el = document.querySelector('[data-theme-dropdown-toggle-icon="' + k + '"]');
+          if (el) { el.classList.toggle('d-none', k !== mode); }
         });
       }
-      document.querySelectorAll('[data-theme-control="theme"]').forEach(function(btn){
-        btn.addEventListener('click', function(){ applyTheme(btn.value); });
+      document.querySelectorAll('[data-theme-control="theme"]').forEach(function (btn) {
+        btn.addEventListener('click', function () { applyTheme(btn.value); });
       });
       // Initialize from store
       applyTheme(localStorage.getItem('theme') || 'light');
@@ -194,7 +353,7 @@
       return parts.join(', ');
     };
 
-    function rowKey(r){
+    function rowKey(r) {
       if (r.conn_host && r.conn_port) return `${r.conn_host}:${r.conn_port}`;
       return r.ip || '';
     }
@@ -231,14 +390,14 @@
           pageLength: 10,
           // Layout: Top-left filter; bottom info (left), length (center), pagination (right)
           dom: "<'row dt-top'<'col-sm-12 col-md-6'f><'col-sm-12 col-md-6 text-end dt-top-actions'>>" +
-               "t" +
-               "<'row dt-bottom'<'col-sm-12 col-md-4'i><'col-sm-12 col-md-4 text-center'l><'col-sm-12 col-md-4'p>>"
+            "t" +
+            "<'row dt-bottom'<'col-sm-12 col-md-4'i><'col-sm-12 col-md-4 text-center'l><'col-sm-12 col-md-4'p>>"
         }));
         // Helpers to work with selection across all filtered rows
-        function filteredKeys(){
+        function filteredKeys() {
           const keys = [];
           if (!table) return keys;
-          table.rows({search:'applied'}).every(function(){
+          table.rows({ search: 'applied' }).every(function () {
             const row = this.data(); // array of cells
             const html = row && row[0] ? String(row[0]) : '';
             const m = html.match(/data-key=\"([^\"]*)\"/);
@@ -246,24 +405,24 @@
           });
           return keys;
         }
-        function syncVisibleCheckboxes(){
-          $('#devicesTable tbody input.row-select').each(function(){
+        function syncVisibleCheckboxes() {
+          $('#devicesTable tbody input.row-select').each(function () {
             const key = this.getAttribute('data-key') || '';
             this.checked = selectedKeys.has(key);
           });
         }
-        function updateHeaderSelectAllState(){
+        function updateHeaderSelectAllState() {
           const header = document.getElementById('selectAll');
           if (!header || !table) return;
           const keys = filteredKeys();
           const total = keys.length;
           let selected = 0;
-          for (const k of keys){ if (selectedKeys.has(k)) selected++; }
+          for (const k of keys) { if (selectedKeys.has(k)) selected++; }
           header.indeterminate = selected > 0 && selected < total;
           header.checked = total > 0 && selected === total;
         }
         // Header select-all operates on all filtered rows (not just current page)
-        $('#devicesTable').on('change', '#selectAll, #selectAllHead', function(){
+        $('#devicesTable').on('change', '#selectAll, #selectAllHead', function () {
           const checked = this.checked;
           const keys = filteredKeys();
           keys.forEach(k => { if (checked) selectedKeys.add(k); else selectedKeys.delete(k); });
@@ -271,30 +430,30 @@
           updateHeaderSelectAllState();
         });
         // Row checkbox change handling (preserve selection across pages)
-        $('#devicesTable').on('change', 'tbody input.row-select', function(){
+        $('#devicesTable').on('change', 'tbody input.row-select', function () {
           const key = this.getAttribute('data-key') || '';
           if (this.checked) selectedKeys.add(key); else selectedKeys.delete(key);
           updateHeaderSelectAllState();
         });
         // Keep checkboxes in sync on table redraws (paging, sorting, filtering)
-        $('#devicesTable').on('draw.dt', function(){
+        $('#devicesTable').on('draw.dt', function () {
           syncVisibleCheckboxes();
           updateHeaderSelectAllState();
         });
         // Inject action buttons into top-right area (fallback to filter if needed)
-        (function ensureToolbarButtons(){
+        (function ensureToolbarButtons() {
           if (document.getElementById('refreshBtn')) return; // already added
           var container = document.querySelector('#devicesTable_wrapper .dt-top-actions') ||
-                          document.querySelector('#devicesTable_wrapper .dataTables_filter');
+            document.querySelector('#devicesTable_wrapper .dataTables_filter');
           if (!container) return;
           // Find Devices button (leftmost)
           var searchBtn = document.createElement('button');
           searchBtn.id = 'findBtn';
           searchBtn.type = 'button';
           searchBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn';
-          searchBtn.setAttribute('data-bs-toggle','tooltip');
-          searchBtn.setAttribute('data-bs-placement','bottom');
-          searchBtn.setAttribute('data-bs-original-title','Find Devices');
+          searchBtn.setAttribute('data-bs-toggle', 'tooltip');
+          searchBtn.setAttribute('data-bs-placement', 'bottom');
+          searchBtn.setAttribute('data-bs-original-title', 'Find Devices');
           searchBtn.innerHTML = '<svg class="fas svg-h-8 me-2" aria-hidden="true" focusable="false" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M505 442.7L405.3 343c28.4-34.9 45.7-79.5 45.7-128C451 96.5 354.5 0 231 0S11 96.5 11 215s96.5 215 220 215c48.5 0 93.1-17.3 128-45.7L442.7 505c9.4 9.4 24.6 9.4 33.9 0l28.3-28.3c9.5-9.4 9.5-24.6.1-33.9zM231 367c-83.7 0-152-68.3-152-152S147.3 63 231 63s152 68.3 152 152-68.3 152-152 152z"></path></svg>Find Devices';
 
           // Refresh button (formerly GBL Query)
@@ -302,24 +461,24 @@
           runBtn.id = 'refreshBtn';
           runBtn.type = 'button';
           runBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn';
-          runBtn.setAttribute('data-bs-toggle','tooltip');
-          runBtn.setAttribute('data-bs-placement','bottom');
-          runBtn.setAttribute('data-bs-original-title','Refresh');
+          runBtn.setAttribute('data-bs-toggle', 'tooltip');
+          runBtn.setAttribute('data-bs-placement', 'bottom');
+          runBtn.setAttribute('data-bs-original-title', 'Refresh');
           runBtn.innerHTML = '<svg class="fas svg-h-8 me-2" aria-hidden="true" focusable="false" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M370.72 133.28C339.458 104.008 298.888 87.962 255.848 88c-77.458.068-144.328 53.178-162.791 126.85-1.344 5.363-6.122 9.15-11.651 9.15H24.103c-7.498 0-13.194-6.807-11.807-14.176C33.933 94.924 134.813 8 256 8c66.448 0 126.791 26.136 171.315 68.685L463.03 40.97C478.149 25.851 504 36.559 504 57.941V192c0 13.255-10.745 24-24 24H345.941c-21.382 0-32.09-25.851-16.971-40.971l41.75-41.749zM32 296h134.059c21.382 0 32.09 25.851 16.971 40.971l-41.75 41.75c31.262 29.273 71.835 45.319 114.876 45.28 77.418-.07 144.315-53.144 162.787-126.849 1.344-5.363 6.122-9.15 11.651-9.15h57.304c7.498 0 13.194 6.807 11.807 14.176C478.067 417.076 377.187 504 256 504c-66.448 0-126.791-26.136-171.315-68.685L48.97 471.03C33.851 486.149 8 475.441 8 454.059V320c0-13.255 10.745-24 24-24z"></path></svg>Refresh';
           var updBtn = document.createElement('button');
           updBtn.id = 'updateBtn';
           updBtn.type = 'button';
           updBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn';
-          updBtn.setAttribute('data-bs-toggle','tooltip');
-          updBtn.setAttribute('data-bs-placement','bottom');
-          updBtn.setAttribute('data-bs-original-title','Update');
+          updBtn.setAttribute('data-bs-toggle', 'tooltip');
+          updBtn.setAttribute('data-bs-placement', 'bottom');
+          updBtn.setAttribute('data-bs-original-title', 'Update');
           updBtn.innerHTML = '<svg class="fas svg-h-8 me-2" aria-hidden="true" focusable="false" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M255.545 8c-66.269.119-126.438 26.233-170.86 68.685L48.971 40.971C33.851 25.851 8 36.559 8 57.941V192c0 13.255 10.745 24 24 24h134.059c21.382 0 32.09-25.851 16.971-40.971l-41.75-41.75c30.864-28.899 70.801-44.907 113.23-45.273 92.398-.798 170.283 73.977 169.484 169.442C423.236 348.009 349.816 424 256 424c-41.127 0-79.997-14.678-110.63-41.556-4.743-4.161-11.906-3.908-16.368.553L89.34 422.659c-4.872 4.872-4.631 12.815.482 17.433C133.798 479.813 192.074 504 256 504c136.966 0 247.999-111.033 248-247.998C504.001 119.193 392.354 7.755 255.545 8z"></path></svg>Update';
           container.appendChild(searchBtn);
           container.appendChild(runBtn);
           container.appendChild(updBtn);
           // Wire events (functions can be defined elsewhere)
-          searchBtn.addEventListener('click', runQuery);
-          runBtn.addEventListener('click', function(){ /* TBD: separate refresh vs find if needed */ });
+          searchBtn.addEventListener('click', runFind);
+          runBtn.addEventListener('click', runRefresh);
           updBtn.addEventListener('click', runUpdate);
         })();
       } else {
@@ -336,10 +495,10 @@
       return data.running;
     }
 
-    async function runQuery() {
+    async function runFind() {
       try {
-        const btn = document.getElementById('refreshBtn');
-        btn.disabled = true;
+        const btn = document.getElementById('findBtn');
+        if (btn) btn.disabled = true;
         await fetch('/api/run');
         let running = true;
         while (running) {
@@ -349,16 +508,48 @@
       } catch (e) {
         console.error(e);
       } finally {
-        document.getElementById('refreshBtn').disabled = false;
+        const btn = document.getElementById('findBtn');
+        if (btn) btn.disabled = false;
       }
     }
 
-    async function runUpdate(){
+    async function runRefresh() {
+      try {
+        const btn = document.getElementById('refreshBtn');
+        if (btn) btn.disabled = true;
+
+        const hosts = Array.from(selectedKeys);
+        if (hosts.length > 0) {
+          // Run status check for selected devices
+          await fetch('/api/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ hosts })
+          });
+        } else {
+          // Run global GBL search
+          await fetch('/api/run');
+        }
+
+        let running = true;
+        while (running) {
+          running = await fetchDevices();
+          await new Promise(r => setTimeout(r, 1500));
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        const btn = document.getElementById('refreshBtn');
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    async function runUpdate() {
       try {
         const btn = document.getElementById('updateBtn');
         if (!btn) return;
         const hosts = Array.from(selectedKeys);
-        if (hosts.length === 0){
+        if (hosts.length === 0) {
           alert('Please select at least one device.');
           return;
         }
@@ -386,10 +577,10 @@
     fetchDevices();
 
     // Vertical menu collapse/open with animation + persistence
-    (function(){
+    (function () {
       var btn = document.querySelector('.navbar-vertical-toggle');
       if (btn) {
-        btn.addEventListener('click', function(){
+        btn.addEventListener('click', function () {
           var html = document.documentElement;
           var collapsed = html.classList.toggle('navbar-vertical-collapsed');
           localStorage.setItem('isNavbarVerticalCollapsed', collapsed);
@@ -398,4 +589,5 @@
     })();
   </script>
 </body>
+
 </html>
