@@ -313,7 +313,8 @@
                     <th>IP</th>
                     <th>Product</th>
                     <th>MAC</th>
-                    <th>Firmware</th>
+                    <th>Firmware Info</th>
+                    <th>Firmware Source</th>
                     <th>Notes</th>
                     <th>Error</th>
                   </tr>
@@ -323,6 +324,10 @@
             </div>
           </div>
         </div>
+
+        <!-- Hidden file input for firmware upload -->
+        <input type="file" id="fwUploadInput" accept=".bin" style="display:none" />
+
       </div>
     </div>
   </main>
@@ -364,6 +369,29 @@
     })();
     let table;
     const selectedKeys = new Set();
+    let lastResults = [];
+
+    const firmwareOverrides = {}; // Map keys (IPs) to selected filename (or 'onlineupdate')
+    let availableFirmwareFiles = [];
+    const modelMap = {}; // Map key -> product/model string for grouping
+
+    // Initial fetch of firmware list
+    async function fetchFirmwareList() {
+      try {
+        const res = await fetch('/api/firmware');
+        if (res.ok) {
+          const data = await res.json();
+          availableFirmwareFiles = data.files || [];
+          // Trigger re-render if we have rows
+          if (lastResults.length > 0) {
+            render(lastResults);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to fetch firmware list", e);
+      }
+    }
+
     const firmwareText = (r) => {
       const parts = [];
       if (r.initial_firmware) {
@@ -384,6 +412,37 @@
       return r.ip || '';
     }
 
+    function getModelGroup(r) {
+      // Use selected_prodid if available (resolved model), else product name
+      return r.selected_prodid || r.product_name || "Unknown";
+    }
+
+    function createFirmwareSelect(r, key) {
+      const currentSelection = firmwareOverrides[key] || 'onlineupdate';
+      const model = getModelGroup(r);
+      modelMap[key] = model; // Track model for this key
+
+      let options = `<option value="onlineupdate" ${currentSelection === 'onlineupdate' ? 'selected' : ''}>Online Update (Default)</option>`;
+
+      // Recommended files (matching model ID if visible in name, or simplistic check)
+      // Since we don't have complex matching logic in JS easily, we show all files but maybe group/sort?
+      // Let's just list all files for now, but maybe put recent valid ones on top if we could.
+      // For simplicity: List all.
+
+      if (availableFirmwareFiles.length > 0) {
+        options += `<optgroup label="Available Files">`;
+        availableFirmwareFiles.forEach(f => {
+          const sel = currentSelection === f.name ? 'selected' : '';
+          options += `<option value="${f.name}" ${sel}>${f.name}</option>`;
+        });
+        options += `</optgroup>`;
+      }
+
+      options += `<option value="__upload__">Upload / Add Firmware...</option>`;
+
+      return `<select class="form-select form-select-sm fw-select" data-key="${key}" style="width: 180px;">${options}</select>`;
+    }
+
     function render(results) {
       const rows = results.map(r => {
         const key = rowKey(r);
@@ -396,6 +455,7 @@
           r.product_name || '',
           (r.mac || '').replace(/_/g, ':'),
           firmwareText(r),
+          createFirmwareSelect(r, key),
           r.firmware_status || r.firmware_upload_notes || '',
           r.error_message || ''
         ];
@@ -409,7 +469,8 @@
             { title: 'IP' },
             { title: 'Product' },
             { title: 'MAC' },
-            { title: 'Firmware' },
+            { title: 'Firmware Info' },
+            { title: 'Firmware Source' },
             { title: 'Notes' },
             { title: 'Error' }
           ],
@@ -503,6 +564,39 @@
           container.appendChild(runBtn);
           container.appendChild(updBtn);
 
+
+          // Event delegation for firmware selects
+          $('#devicesTable tbody').on('change', '.fw-select', function () {
+            const val = $(this).val();
+            const key = $(this).data('key');
+
+            if (val === '__upload__') {
+              // Reset select to previous or default to avoid staying on "Upload..." if cancelled
+              $(this).val(firmwareOverrides[key] || 'onlineupdate');
+              // Open file dialog
+              activeUploadKey = key; // Track which row triggered it (optional, mainly for restoring selection)
+              document.getElementById('fwUploadInput').click();
+              return;
+            }
+
+            // Update this row
+            firmwareOverrides[key] = val;
+
+            // Propagate to all rows with same Model
+            const model = modelMap[key];
+            if (model) {
+              // Find all keys with same model
+              Object.keys(modelMap).forEach(k => {
+                if (modelMap[k] === model) {
+                  firmwareOverrides[k] = val;
+                  // Update DOM if visible
+                  const sel = $(`.fw-select[data-key="${k}"]`);
+                  if (sel.length) sel.val(val);
+                }
+              });
+            }
+          });
+
           // Spinner
           var spinDiv = document.createElement('div');
           spinDiv.id = 'globalSpinner';
@@ -546,6 +640,7 @@
         }
       });
 
+      lastResults = results; // Cache for re-rednering if firmware list updates
       render(results);
       updateSpinner(data.running);
       return data.running;
@@ -616,10 +711,41 @@
           alert('Please select at least one device.');
           return;
         }
+
+        // Construct firmware_overrides map: ModelID -> {filename, version}
+        // backend expects: firmware_overrides = { "ModelSection": { "filename": "x.bin", "version": "force..." } }
+        // Problem: We only know keys (IPs) -> filename. We need to map to ModelID (section in version.ini).
+
+        // We need to request the 'selected_prodid' from the list of results to map correctly.
+        // Let's scroll through the current data source of the table?
+        const currentData = table.data().toArray(); // Arrays of data... raw data objects are not stored directly in table().data() API usually returns processed unless configured.
+        // Actually, we are updating the entire list via render(results). We can access the last 'results' array if we store it globally.
+        // BUT, we have modelMap[key] which stores `selected_prodid || product_name`. 
+        // Ideally `selected_prodid` is what we want.
+
+        // Let's rebuild the overrides based on the selection
+        const overrides = {};
+
+        hosts.forEach(ip => { // ip is the "key" from rowKey
+          // Find the chosen source
+          const source = firmwareOverrides[ip];
+          if (source && source !== 'onlineupdate') {
+            // Identify model ID. We stored it in modelMap during render.
+            const modelID = modelMap[ip];
+            if (modelID) {
+              // We use a custom version string to force the update
+              overrides[modelID] = {
+                "filename": source,
+                "version": "custom_selection_" + new Date().getTime()
+              };
+            }
+          }
+        });
+
         await fetch('/api/update', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ hosts })
+          body: JSON.stringify({ hosts, firmware_overrides: overrides })
         });
         let running = true;
         while (running) {
@@ -632,8 +758,57 @@
       }
     }
 
+
+
+    // File Upload Handling
+    let activeUploadKey = null;
+    const fileInput = document.getElementById('fwUploadInput');
+    fileInput.addEventListener('change', async function () {
+      if (!this.files || !this.files[0]) return;
+      const file = this.files[0];
+      // simplified: send raw binary via body, pass filename in header
+      // avoids multipart parser dependency/complexity issues in backend
+      try {
+        const res = await fetch('/api/upload_firmware', {
+          method: 'POST',
+          headers: {
+            'X-Filename': file.name,
+            'Content-Type': 'application/octet-stream'
+          },
+          body: file
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const filename = data.filename;
+          // Refresh list
+          // Update overrides FIRST, then refresh list which triggers render
+          if (activeUploadKey) {
+            firmwareOverrides[activeUploadKey] = filename;
+            const model = modelMap[activeUploadKey];
+            if (model) {
+              Object.keys(modelMap).forEach(k => {
+                if (modelMap[k] === model) {
+                  firmwareOverrides[k] = filename;
+                }
+              });
+            }
+          }
+
+          await fetchFirmwareList();
+        } else {
+          alert('Upload failed: ' + await res.text());
+        }
+      } catch (e) {
+        console.error(e);
+        alert('Upload error');
+      }
+      // Clear input
+      this.value = '';
+    });
+
     // Buttons are injected next to the search input when the table initializes
     fetchDevices();
+    fetchFirmwareList();
 
     // Vertical menu collapse/open with animation + persistence
     (function () {

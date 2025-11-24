@@ -279,6 +279,7 @@ def parse_args() -> Tuple[Namespace, ConfigParser, ConfigParser, str]:
     parser.add_argument('-ng', '--nogbl', help='Dont use GBL', action="store_true", default=False)
     parser.add_argument('--device-concurrency', type=int, default=1, help='Number of devices processed in parallel (default: 1)')
     parser.add_argument('--jsonl-progress', type=str, default=None, help='Write progress events to a JSONL file')
+    parser.add_argument('--firmware-config', type=json.loads, default=None, help='JSON mapping of model->{filename, version} to override version.ini')
     _args = parser.parse_args()
 
     log.debug(f"Reading {_args.upload_ini} ...")
@@ -841,6 +842,7 @@ def run_processing_from_options(
     configip: Optional[str] = None,
     device_concurrency: int = 1,
     progress_cb: Optional[Callable[[Dict[str, Any]], None]] = None,
+    firmware_config: Optional[Dict[str, Dict[str, str]]] = None,
 ) -> List[DeviceResult]:
     """
     Programmatic entry-point to run the processing without CLI.
@@ -919,6 +921,26 @@ def run_processing_from_options(
     else:
         log.debug(f"[web] Reading {os.path.join(config['defaults']['fwdir'], args.version_ini)} ...")
         firmware.read(os.path.join(config['defaults']['fwdir'], args.version_ini))
+    
+    # Apply firmware overrides if provided
+    # Structure: {"80xx": {"filename": "my_firmware.bin", "version": "custom"}}
+    if firmware_config:
+        log.info(f"Applying firmware overrides: {firmware_config}")
+        for model_section, overrides in firmware_config.items():
+            # Ensure section exists (or create it if forcing a completely new model)
+            if not firmware.has_section(model_section):
+                # Optionally warn or creating might be risky if we don't know json/other params.
+                # But for 'filename' override it might be enough if code only looks up filename.
+                # However, resolve_prodid uses specific logic.
+                firmware.add_section(model_section)
+            
+            for k, v in overrides.items():
+                firmware.set(model_section, k, str(v))
+            
+            # Identify if we're forcing a specific file, ensure path/logic holds
+            # deployDev uses 'filename' from this config.
+            # It also checks 'version' to decide if update is needed. 
+            # If we set 'version' to 'force_update_custom', it likely triggers update.
 
     # Determine own IP for GBL/UDP search
     my_ip = config['defaults']['myIp'] if 'myIp' in config['defaults'] else '0.0.0.0'
