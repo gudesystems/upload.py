@@ -280,6 +280,7 @@ def parse_args() -> Tuple[Namespace, ConfigParser, ConfigParser, str]:
     parser.add_argument('--device-concurrency', type=int, default=1, help='Number of devices processed in parallel (default: 1)')
     parser.add_argument('--jsonl-progress', type=str, default=None, help='Write progress events to a JSONL file')
     parser.add_argument('--firmware-config', type=json.loads, default=None, help='JSON mapping of model->{filename, version} to override version.ini')
+    parser.add_argument('--custom-config', type=json.loads, default=None, help='JSON mapping of ip->config_filename or "RESET" to override config file selection')
     _args = parser.parse_args()
 
     log.debug(f"Reading {_args.upload_ini} ...")
@@ -580,7 +581,20 @@ def iterate_list(
             result.mac = mac
 
             log.debug(f"Getting config filename for MAC {mac}, IP {ip}...")
-            cfg_filename = DeployDev.get_config_filename('config', 'config', 'txt', mac, ip, _args.configip)
+            
+            # Check for custom config override
+            custom_config_map = getattr(_args, 'custom_config', None) or {}
+            # Try to find match by IP (exact or host:port if matches dev.host)
+            custom_config_val = custom_config_map.get(ip)
+            if not custom_config_val and dev.host in custom_config_map:
+                custom_config_val = custom_config_map[dev.host]
+
+            factory_reset_requested = (custom_config_val == "RESET")
+            explicit_config_file = custom_config_val if (custom_config_val and not factory_reset_requested) else None
+
+            # Pass explicit_filename if we have one (not RESET, and not None)
+            cfg_filename = DeployDev.get_config_filename('config', 'config', 'txt', mac, ip, _args.configip, explicit_filename=explicit_config_file)
+            
             log.debug(f"Getting ssl-cert filename for MAC {mac}, IP {ip}...")
             ssl_cert_filename = DeployDev.get_config_filename('ssl', 'cert', 'pem', mac, ip, _args.configip)
 
@@ -632,25 +646,50 @@ def iterate_list(
 
             # deploy Firmware
             if selected_prod_id and selected_prod_id in _firmware: # Check if selected_prod_id is valid for _firmware
-                try:
-                    fw_update_result = dev.update_firmware(device_data, _firmware,
+                # Check for explicit no-update flag
+                target_filename = _firmware.get(selected_prod_id, 'filename', fallback='')
+                if target_filename == '__no_update__':
+                     log.info(f"[{ip}] Firmware update skipped by user request (No Update).")
+                     result.firmware_status = "Skipped (No Update)"
+                else: 
+                    try:
+                        fw_update_result = dev.update_firmware(device_data, _firmware,
                                                            _config.get('defaults', 'fwdir', fallback='fw'),
                                                            forced=_args.forcefw,
                                                            online_update=_args.onlineupdate,
                                                            show_progress_bar=use_progress_bar, progress_cb=emit)
 
-                    result.final_firmware = fw_update_result.get("final_version", result.initial_firmware)
-                    result.firmware_status = fw_update_result.get("status_message", "firmware update status unknown")
-                    result.firmware_upload_notes = fw_update_result.get("upload_notes")
-                except ValueError as ve_fw: # Catches firmware file not found etc. from update_firmware
-                    result.firmware_status = f"failed: {str(ve_fw)}"
-                    log.warning(f"Skipped firmware update for {ip}: {ve_fw}")
-                except Exception as e_fw_update: # Catch any other unexpected error during update_firmware
-                    result.firmware_status = f"failed: unexpected error during update ({str(e_fw_update)})"
-                    log.error(f"Unexpected error during firmware update for {ip}: {e_fw_update}", exc_info=True)
+                        result.final_firmware = fw_update_result.get("final_version", result.initial_firmware)
+                        result.firmware_status = fw_update_result.get("status_message", "firmware update status unknown")
+                        result.firmware_upload_notes = fw_update_result.get("upload_notes")
+                    except ValueError as ve_fw: # Catches firmware file not found etc. from update_firmware
+                        result.firmware_status = f"failed: {str(ve_fw)}"
+                        log.warning(f"Skipped firmware update for {ip}: {ve_fw}")
+                    except Exception as e_fw_update: # Catch any other unexpected error during update_firmware
+                        result.firmware_status = f"failed: unexpected error during update ({str(e_fw_update)})"
+                        log.error(f"Unexpected error during firmware update for {ip}: {e_fw_update}", exc_info=True)
+
+            # Factory Reset Processing
+            if factory_reset_requested:
+                log.info(f"[{ip}] Factory reset requested via custom config...")
+                try:
+                     if dev.factory_reset():
+                         log.info(f"[{ip}] Factory reset triggered successfully.")
+                         result.firmware_status = "Factory Reset Triggered"
+                         # Reset usually reboots the device, so we might want to skip further configuration
+                         # But we continue to let valid flow happen if possible, though config upload likely moot
+                     else:
+                        log.warning(f"[{ip}] Factory reset returned False (maybe not supported or failed).")
+                        result.error_message = "Factory reset failed or not supported"
+                except Exception as e_reset:
+                     log.error(f"[{ip}] Factory reset failed: {e_reset}")
+                     result.error_message = f"Factory reset failed: {e_reset}"
 
             # Deploy Configuration
-            if cfg_filename is not None:
+            # Skip config upload if we just did a factory reset? 
+            # Usually yes, unless user wants a specific config AFTER reset.
+            # But the UI flow suggests either Reset OR Config, not both.
+            if cfg_filename is not None and not factory_reset_requested:
                 log.debug(f"Attempting to upload configuration {cfg_filename} to {ip}...")
                 try:
                     dev.upload_config(cfg_filename, _args.configip, show_progress_bar=use_progress_bar, progress_cb=emit)
@@ -843,6 +882,7 @@ def run_processing_from_options(
     device_concurrency: int = 1,
     progress_cb: Optional[Callable[[Dict[str, Any]], None]] = None,
     firmware_config: Optional[Dict[str, Dict[str, str]]] = None,
+    custom_config: Optional[Dict[str, str]] = None,
 ) -> List[DeviceResult]:
     """
     Programmatic entry-point to run the processing without CLI.
@@ -867,6 +907,7 @@ def run_processing_from_options(
     args.nogbl = False
     # Concurrency for programmatic callers
     args.device_concurrency = int(device_concurrency or 1)
+    args.custom_config = custom_config
 
     # Read upload.ini
     log.debug(f"[web] Reading {args.upload_ini} ...")

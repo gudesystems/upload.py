@@ -315,6 +315,7 @@
                     <th>MAC</th>
                     <th>Firmware Info</th>
                     <th>Firmware Source</th>
+                    <th>Config</th>
                     <th>Notes</th>
                     <th>Error</th>
                   </tr>
@@ -327,6 +328,7 @@
 
         <!-- Hidden file input for firmware upload -->
         <input type="file" id="fwUploadInput" accept=".bin" style="display:none" />
+        <input type="file" id="cfgUploadInput" accept=".txt,.cfg,.ini,.json" style="display:none" />
 
       </div>
     </div>
@@ -373,6 +375,10 @@
 
     const firmwareOverrides = {}; // Map keys (IPs) to selected filename (or 'onlineupdate')
     let availableFirmwareFiles = [];
+
+    const configOverrides = {}; // Map keys (IPs) to selected config filename (or 'RESET' or '')
+    let availableConfigFiles = [];
+
     const modelMap = {}; // Map key -> product/model string for grouping
 
     // Initial fetch of firmware list
@@ -389,6 +395,22 @@
         }
       } catch (e) {
         console.error("Failed to fetch firmware list", e);
+      }
+    }
+
+    async function fetchConfigList() {
+      try {
+        const res = await fetch('/api/config');
+        if (res.ok) {
+          const data = await res.json();
+          availableConfigFiles = data.files || [];
+          // Trigger re-render if we have rows
+          if (lastResults.length > 0) {
+            render(lastResults);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to fetch config list", e);
       }
     }
 
@@ -423,6 +445,7 @@
       modelMap[key] = model; // Track model for this key
 
       let options = `<option value="onlineupdate" ${currentSelection === 'onlineupdate' ? 'selected' : ''}>Online Update (Default)</option>`;
+      options += `<option value="__no_update__" ${currentSelection === '__no_update__' ? 'selected' : 'style="color:gray;"'}>No Update</option>`;
 
       // Recommended files (matching model ID if visible in name, or simplistic check)
       // Since we don't have complex matching logic in JS easily, we show all files but maybe group/sort?
@@ -443,6 +466,26 @@
       return `<select class="form-select form-select-sm fw-select" data-key="${key}" style="width: 180px;">${options}</select>`;
     }
 
+    function createConfigSelect(r, key) {
+      const currentSelection = configOverrides[key] || '';
+
+      let options = `<option value="" ${currentSelection === '' ? 'selected' : ''}>Do not modify</option>`;
+      options += `<option value="RESET" ${currentSelection === 'RESET' ? 'selected' : 'style="color:red;"'}>Factory Reset</option>`;
+
+      if (availableConfigFiles.length > 0) {
+        options += `<optgroup label="Available Configs">`;
+        availableConfigFiles.forEach(f => {
+          const sel = currentSelection === f.name ? 'selected' : '';
+          options += `<option value="${f.name}" ${sel}>${f.name}</option>`;
+        });
+        options += `</optgroup>`;
+      }
+
+      options += `<option value="__upload_config__">Upload / Add Config...</option>`;
+
+      return `<select class="form-select form-select-sm cfg-select" data-key="${key}" style="width: 150px;">${options}</select>`;
+    }
+
     function render(results) {
       const rows = results.map(r => {
         const key = rowKey(r);
@@ -456,10 +499,12 @@
           (r.mac || '').replace(/_/g, ':'),
           firmwareText(r),
           createFirmwareSelect(r, key),
+          createConfigSelect(r, key),
           r.firmware_status || r.firmware_upload_notes || '',
           r.error_message || ''
         ];
       });
+
       if (!table) {
         table = new $.fn.dataTable.Api($('#devicesTable').DataTable({
           data: rows,
@@ -471,21 +516,27 @@
             { title: 'MAC' },
             { title: 'Firmware Info' },
             { title: 'Firmware Source' },
+            { title: 'Config' },
             { title: 'Notes' },
             { title: 'Error' }
           ],
           pageLength: 10,
           // Layout: Top-left filter; bottom info (left), length (center), pagination (right)
-          dom: "<'row dt-top'<'col-sm-12 col-md-6'f><'col-sm-12 col-md-6 text-end dt-top-actions'>>" +
+          // Note: using 'dom' to create a split header: search on left, actions on right
+          dom: "<'row dt-top text-start'<'col-sm-12 col-md-6'f><'col-sm-12 col-md-6 text-end dt-top-actions'>>" +
             "t" +
-            "<'row dt-bottom'<'col-sm-12 col-md-4'i><'col-sm-12 col-md-4 text-center'l><'col-sm-12 col-md-4'p>>"
+            "<'row dt-bottom'<'col-sm-12 col-md-4'i><'col-sm-12 col-md-4 text-center'l><'col-sm-12 col-md-4'p>>",
+          initComplete: function () {
+            injectToolbarButtons();
+          }
         }));
-        // Helpers to work with selection across all filtered rows
+
+        // Helpers
         function filteredKeys() {
           const keys = [];
           if (!table) return keys;
           table.rows({ search: 'applied' }).every(function () {
-            const row = this.data(); // array of cells
+            const row = this.data();
             const html = row && row[0] ? String(row[0]) : '';
             const m = html.match(/data-key=\"([^\"]*)\"/);
             if (m) keys.push(m[1]);
@@ -508,7 +559,8 @@
           header.indeterminate = selected > 0 && selected < total;
           header.checked = total > 0 && selected === total;
         }
-        // Header select-all operates on all filtered rows (not just current page)
+
+        // Selection Events
         $('#devicesTable').on('change', '#selectAll, #selectAllHead', function () {
           const checked = this.checked;
           const keys = filteredKeys();
@@ -516,103 +568,128 @@
           syncVisibleCheckboxes();
           updateHeaderSelectAllState();
         });
-        // Row checkbox change handling (preserve selection across pages)
         $('#devicesTable').on('change', 'tbody input.row-select', function () {
           const key = this.getAttribute('data-key') || '';
           if (this.checked) selectedKeys.add(key); else selectedKeys.delete(key);
           updateHeaderSelectAllState();
         });
-        // Keep checkboxes in sync on table redraws (paging, sorting, filtering)
         $('#devicesTable').on('draw.dt', function () {
           syncVisibleCheckboxes();
           updateHeaderSelectAllState();
         });
-        // Inject action buttons into top-right area (fallback to filter if needed)
-        (function ensureToolbarButtons() {
-          if (document.getElementById('refreshBtn')) return; // already added
-          var container = document.querySelector('#devicesTable_wrapper .dt-top-actions') ||
-            document.querySelector('#devicesTable_wrapper .dataTables_filter');
-          if (!container) return;
-          // Find Devices button (leftmost)
-          var searchBtn = document.createElement('button');
-          searchBtn.id = 'findBtn';
-          searchBtn.type = 'button';
-          searchBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn';
-          searchBtn.setAttribute('data-bs-toggle', 'tooltip');
-          searchBtn.setAttribute('data-bs-placement', 'bottom');
-          searchBtn.setAttribute('data-bs-original-title', 'Find Devices');
-          searchBtn.innerHTML = '<svg class="fas svg-h-8 me-2" aria-hidden="true" focusable="false" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M505 442.7L405.3 343c28.4-34.9 45.7-79.5 45.7-128C451 96.5 354.5 0 231 0S11 96.5 11 215s96.5 215 220 215c48.5 0 93.1-17.3 128-45.7L442.7 505c9.4 9.4 24.6 9.4 33.9 0l28.3-28.3c9.5-9.4 9.5-24.6.1-33.9zM231 367c-83.7 0-152-68.3-152-152S147.3 63 231 63s152 68.3 152 152-68.3 152-152 152z"></path></svg>Find Devices';
 
-          // Refresh button (formerly GBL Query)
-          var runBtn = document.createElement('button');
-          runBtn.id = 'refreshBtn';
-          runBtn.type = 'button';
-          runBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn';
-          runBtn.setAttribute('data-bs-toggle', 'tooltip');
-          runBtn.setAttribute('data-bs-placement', 'bottom');
-          runBtn.setAttribute('data-bs-original-title', 'Refresh');
-          runBtn.innerHTML = '<svg class="fas svg-h-8 me-2" aria-hidden="true" focusable="false" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M370.72 133.28C339.458 104.008 298.888 87.962 255.848 88c-77.458.068-144.328 53.178-162.791 126.85-1.344 5.363-6.122 9.15-11.651 9.15H24.103c-7.498 0-13.194-6.807-11.807-14.176C33.933 94.924 134.813 8 256 8c66.448 0 126.791 26.136 171.315 68.685L463.03 40.97C478.149 25.851 504 36.559 504 57.941V192c0 13.255-10.745 24-24 24H345.941c-21.382 0-32.09-25.851-16.971-40.971l41.75-41.749zM32 296h134.059c21.382 0 32.09 25.851 16.971 40.971l-41.75 41.75c31.262 29.273 71.835 45.319 114.876 45.28 77.418-.07 144.315-53.144 162.787-126.849 1.344-5.363 6.122-9.15 11.651-9.15h57.304c7.498 0 13.194 6.807 11.807 14.176C478.067 417.076 377.187 504 256 504c-66.448 0-126.791-26.136-171.315-68.685L48.97 471.03C33.851 486.149 8 475.441 8 454.059V320c0-13.255 10.745-24 24-24z"></path></svg>Refresh';
-          var updBtn = document.createElement('button');
-          updBtn.id = 'updateBtn';
-          updBtn.type = 'button';
-          updBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn';
-          updBtn.setAttribute('data-bs-toggle', 'tooltip');
-          updBtn.setAttribute('data-bs-placement', 'bottom');
-          updBtn.setAttribute('data-bs-original-title', 'Update');
-          updBtn.innerHTML = '<svg class="fas svg-h-8 me-2" aria-hidden="true" focusable="false" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M255.545 8c-66.269.119-126.438 26.233-170.86 68.685L48.971 40.971C33.851 25.851 8 36.559 8 57.941V192c0 13.255 10.745 24 24 24h134.059c21.382 0 32.09-25.851 16.971-40.971l-41.75-41.75c30.864-28.899 70.801-44.907 113.23-45.273 92.398-.798 170.283 73.977 169.484 169.442C423.236 348.009 349.816 424 256 424c-41.127 0-79.997-14.678-110.63-41.556-4.743-4.161-11.906-3.908-16.368.553L89.34 422.659c-4.872 4.872-4.631 12.815.482 17.433C133.798 479.813 192.074 504 256 504c136.966 0 247.999-111.033 248-247.998C504.001 119.193 392.354 7.755 255.545 8z"></path></svg>Update';
-          container.appendChild(searchBtn);
-          container.appendChild(runBtn);
-          container.appendChild(updBtn);
+        // Dropdown Events (Firmware)
+        $('#devicesTable tbody').on('change', '.fw-select', function () {
+          const val = $(this).val();
+          const key = $(this).data('key');
+          if (val === '__upload__') {
+            $(this).val(firmwareOverrides[key] || 'onlineupdate');
+            activeUploadKey = key;
+            document.getElementById('fwUploadInput').click();
+            return;
+          }
+          firmwareOverrides[key] = val;
+          // Propagate to same model
+          const model = modelMap[key];
+          if (model) {
+            Object.keys(modelMap).forEach(k => {
+              if (modelMap[k] === model) {
+                firmwareOverrides[k] = val;
+                const sel = $(`.fw-select[data-key="${k}"]`);
+                if (sel.length) sel.val(val);
+              }
+            });
+          }
+        });
 
+        // Dropdown Events (Config)
+        $('#devicesTable tbody').on('change', '.cfg-select', function () {
+          const val = $(this).val();
+          const key = $(this).data('key');
+          if (val === '__upload_config__') {
+            $(this).val(configOverrides[key] || '');
+            activeUploadKey = key;
+            document.getElementById('cfgUploadInput').click();
+            return;
+          }
+          configOverrides[key] = val;
+          // Propagate
+          const model = modelMap[key];
+          if (model) {
+            Object.keys(modelMap).forEach(k => {
+              if (modelMap[k] === model) {
+                configOverrides[k] = val;
+                const sel = $(`.cfg-select[data-key="${k}"]`);
+                if (sel.length) sel.val(val);
+              }
+            });
+          }
+        });
 
-          // Event delegation for firmware selects
-          $('#devicesTable tbody').on('change', '.fw-select', function () {
-            const val = $(this).val();
-            const key = $(this).data('key');
+        // Initial Data Fetch
+        fetchFirmwareList();
+        fetchConfigList();
 
-            if (val === '__upload__') {
-              // Reset select to previous or default to avoid staying on "Upload..." if cancelled
-              $(this).val(firmwareOverrides[key] || 'onlineupdate');
-              // Open file dialog
-              activeUploadKey = key; // Track which row triggered it (optional, mainly for restoring selection)
-              document.getElementById('fwUploadInput').click();
-              return;
-            }
-
-            // Update this row
-            firmwareOverrides[key] = val;
-
-            // Propagate to all rows with same Model
-            const model = modelMap[key];
-            if (model) {
-              // Find all keys with same model
-              Object.keys(modelMap).forEach(k => {
-                if (modelMap[k] === model) {
-                  firmwareOverrides[k] = val;
-                  // Update DOM if visible
-                  const sel = $(`.fw-select[data-key="${k}"]`);
-                  if (sel.length) sel.val(val);
-                }
-              });
-            }
-          });
-
-          // Spinner
-          var spinDiv = document.createElement('div');
-          spinDiv.id = 'globalSpinner';
-          spinDiv.className = 'spinner ms-2';
-          container.appendChild(spinDiv);
-
-          // Wire events (functions can be defined elsewhere)
-          searchBtn.addEventListener('click', runFind);
-          runBtn.addEventListener('click', runRefresh);
-          updBtn.addEventListener('click', runUpdate);
-        })();
       } else {
         table.clear();
         table.rows.add(rows);
         table.draw(false);
       }
+    }
+
+    function injectToolbarButtons() {
+      if (document.getElementById('refreshBtn')) return;
+
+      // Try to find the custom container
+      let container = document.querySelector('#devicesTable_wrapper .dt-top-actions');
+
+      // Fallback: look for the filter div and append after it or inside it
+      if (!container) {
+        const filter = document.querySelector('#devicesTable_wrapper .dataTables_filter');
+        if (filter) {
+          // Create a container next to filter if possible, or just use filter
+          container = filter; // fallback to appending to filter line
+        }
+      }
+
+      if (!container) {
+        console.warn("Could not find toolbar container for buttons.");
+        return;
+      }
+
+      // Find Devices
+      var searchBtn = document.createElement('button');
+      searchBtn.id = 'findBtn';
+      searchBtn.type = 'button';
+      searchBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn ms-2';
+      searchBtn.innerHTML = '<svg class="fas svg-h-8 me-2" aria-hidden="true" focusable="false" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M505 442.7L405.3 343c28.4-34.9 45.7-79.5 45.7-128C451 96.5 354.5 0 231 0S11 96.5 11 215s96.5 215 220 215c48.5 0 93.1-17.3 128-45.7L442.7 505c9.4 9.4 24.6 9.4 33.9 0l28.3-28.3c9.5-9.4 9.5-24.6.1-33.9zM231 367c-83.7 0-152-68.3-152-152S147.3 63 231 63s152 68.3 152 152-68.3 152-152 152z"></path></svg>Find Devices';
+      searchBtn.onclick = runFind;
+
+      // Refresh
+      var runBtn = document.createElement('button');
+      runBtn.id = 'refreshBtn';
+      runBtn.type = 'button';
+      runBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn ms-1';
+      runBtn.innerHTML = '<svg class="fas svg-h-8 me-2" aria-hidden="true" focusable="false" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M370.72 133.28C339.458 104.008 298.888 87.962 255.848 88c-77.458.068-144.328 53.178-162.791 126.85-1.344 5.363-6.122 9.15-11.651 9.15H24.103c-7.498 0-13.194-6.807-11.807-14.176C33.933 94.924 134.813 8 256 8c66.448 0 126.791 26.136 171.315 68.685L463.03 40.97C478.149 25.851 504 36.559 504 57.941V192c0 13.255-10.745 24-24 24H345.941c-21.382 0-32.09-25.851-16.971-40.971l41.75-41.749zM32 296h134.059c21.382 0 32.09 25.851 16.971 40.971l-41.75 41.75c31.262 29.273 71.835 45.319 114.876 45.28 77.418-.07 144.315-53.144 162.787-126.849 1.344-5.363 6.122-9.15 11.651-9.15h57.304c7.498 0 13.194 6.807 11.807 14.176C478.067 417.076 377.187 504 256 504c-66.448 0-126.791-26.136-171.315-68.685L48.97 471.03C33.851 486.149 8 475.441 8 454.059V320c0-13.255 10.745-24 24-24z"></path></svg>Refresh';
+      runBtn.onclick = runRefresh;
+
+      // Update
+      var updBtn = document.createElement('button');
+      updBtn.id = 'updateBtn';
+      updBtn.type = 'button';
+      updBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn ms-1';
+      updBtn.innerHTML = '<svg class="fas svg-h-8 me-2" aria-hidden="true" focusable="false" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M255.545 8c-66.269.119-126.438 26.233-170.86 68.685L48.971 40.971C33.851 25.851 8 36.559 8 57.941V192c0 13.255 10.745 24 24 24h134.059c21.382 0 32.09-25.851 16.971-40.971l-41.75-41.75c30.864-28.899 70.801-44.907 113.23-45.273 92.398-.798 170.283 73.977 169.484 169.442C423.236 348.009 349.816 424 256 424c-41.127 0-79.997-14.678-110.63-41.556-4.743-4.161-11.906-3.908-16.368.553L89.34 422.659c-4.872 4.872-4.631 12.815.482 17.433C133.798 479.813 192.074 504 256 504c136.966 0 247.999-111.033 248-247.998C504.001 119.193 392.354 7.755 255.545 8z"></path></svg>Update';
+      updBtn.onclick = runUpdate;
+
+      container.appendChild(searchBtn);
+      container.appendChild(runBtn);
+      container.appendChild(updBtn);
+
+      // Spinner
+      var spinDiv = document.createElement('div');
+      spinDiv.id = 'globalSpinner';
+      spinDiv.className = 'spinner ms-2';
+      container.appendChild(spinDiv);
     }
 
     async function fetchDevices() {
@@ -723,17 +800,13 @@
         // BUT, we have modelMap[key] which stores `selected_prodid || product_name`. 
         // Ideally `selected_prodid` is what we want.
 
-        // Let's rebuild the overrides based on the selection
+        // Build firmware overrides
         const overrides = {};
-
-        hosts.forEach(ip => { // ip is the "key" from rowKey
-          // Find the chosen source
+        hosts.forEach(ip => {
           const source = firmwareOverrides[ip];
           if (source && source !== 'onlineupdate') {
-            // Identify model ID. We stored it in modelMap during render.
             const modelID = modelMap[ip];
             if (modelID) {
-              // We use a custom version string to force the update
               overrides[modelID] = {
                 "filename": source,
                 "version": "custom_selection_" + new Date().getTime()
@@ -742,10 +815,19 @@
           }
         });
 
+        // Build config overrides
+        const confOverrides = {};
+        hosts.forEach(ip => {
+          const val = configOverrides[ip];
+          if (val && val !== '') {
+            confOverrides[ip] = val;
+          }
+        });
+
         await fetch('/api/update', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ hosts, firmware_overrides: overrides })
+          body: JSON.stringify({ hosts, firmware_overrides: overrides, config_overrides: confOverrides })
         });
         let running = true;
         while (running) {
@@ -800,11 +882,51 @@
         }
       } catch (e) {
         console.error(e);
-        alert('Upload error');
+        alert('Upload failed');
       }
-      // Clear input
+      this.value = ''; // reset
+    });
+
+    const cfgInput = document.getElementById('cfgUploadInput');
+    cfgInput.addEventListener('change', async function () {
+      if (!this.files || !this.files[0]) return;
+      const file = this.files[0];
+      try {
+        const res = await fetch('/api/upload_config', {
+          method: 'POST',
+          headers: {
+            'X-Filename': file.name,
+            'Content-Type': 'application/octet-stream'
+          },
+          body: file
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const filename = data.filename;
+
+          if (activeUploadKey) {
+            configOverrides[activeUploadKey] = filename;
+            const model = modelMap[activeUploadKey];
+            if (model) {
+              Object.keys(modelMap).forEach(k => {
+                if (modelMap[k] === model) {
+                  configOverrides[k] = filename;
+                }
+              });
+            }
+          }
+
+          await fetchConfigList();
+        } else {
+          alert('Config upload failed: ' + await res.text());
+        }
+      } catch (e) {
+        console.error(e);
+        alert('Config upload failed');
+      }
       this.value = '';
     });
+
 
     // Buttons are injected next to the search input when the table initializes
     fetchDevices();

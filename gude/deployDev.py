@@ -32,9 +32,25 @@ class DeployDev(HttpDevice):
         return content
 
     @staticmethod
-    def get_config_filename(subdir, prefix, file_ext, mac_addr, ip, config_ip=None):
+    def get_config_filename(subdir, prefix, file_ext, mac_addr, ip, config_ip=None, explicit_filename=None):
         log.info(f"Searching .{file_ext} file, trying:")
         cfg_filename = None
+
+        if explicit_filename:
+            # If explicit name provided (e.g. via UI upload), treat as priority.
+            # We assume it's in the same subdir (e.g. config/foo.txt) if it's just a filename.
+            # If it's a full path, os.path.join handles it (on windows, absolute path triggers override behavior).
+            # But usually we just get the basename from the UI logic/upload.py.
+            cfg_filename = os.path.join(subdir, explicit_filename)
+            if os.path.exists(cfg_filename):
+                 log.info(f"- Explicit match: {cfg_filename}")
+                 return cfg_filename
+            else:
+                 log.warning(f"- Explicit filename given but not found: {cfg_filename}")
+                 # Fallback to search or return None?
+                 # If user explicitly requested it, we should probably fail/return None if missing
+                 # rather than unexpected fallback.
+                 return None
         if config_ip is not None:
             cfg_filename = os.path.join(subdir, f"{prefix}_{config_ip}.{file_ext}")
             log.info(f"- {cfg_filename}")
@@ -286,7 +302,7 @@ class DeployDev(HttpDevice):
         log.info(f"[{self.host}] upload complete, device is rebooting to apply config file, please wait...")
         
         if progress_cb:
-            progress_cb({"ip": self.host, "type": "progress", "progress": 100, "status": "Rebooting..."})
+            progress_cb({"ip": self.host, "type": "progress", "progress": 100, "status": "Rebooting (cfg)..."})
 
         self.reboot(wait_reboot=False, show_progress_bar=show_progress_bar, progress_cb=progress_cb)
         if config_ip is not None:
@@ -315,3 +331,27 @@ class DeployDev(HttpDevice):
             progress_cb({"ip": self.host, "type": "progress", "progress": 100, "status": "Rebooting..."})
 
         self.reboot(wait_reboot=True, max_wait_secs=10, show_progress_bar=show_progress_bar, progress_cb=progress_cb)
+
+    def factory_reset(self, timeout=10.0):
+        """
+        Trigger a factory reset via HTTP POST to status.json?components=2097152&cmd=42.
+        Returns True if successful (HTTP 200), False otherwise.
+        """
+        url = self.get_http_url('status.json')
+        auth = self.get_http_auth()
+        params = {
+            'components': 2097152,
+            'cmd': 42
+        }
+        
+        log.info(f"[{self.host}] Triggering factory reset (POST {url})...")
+        try:
+            r = requests.post(url, params=params, auth=auth, verify=False, timeout=timeout, headers=self.req_headers)
+            if r.status_code == 200:
+                return True
+            else:
+                log.warning(f"[{self.host}] Factory reset POST returned {r.status_code}")
+                return False
+        except Exception as e:
+            log.error(f"[{self.host}] Factory reset exception: {e}")
+            raise
