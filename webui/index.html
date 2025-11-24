@@ -316,6 +316,7 @@
                     <th>Firmware Info</th>
                     <th>Firmware Source</th>
                     <th>Config</th>
+                    <th>SSL</th>
                     <th>Notes</th>
                     <th>Error</th>
                   </tr>
@@ -329,6 +330,7 @@
         <!-- Hidden file input for firmware upload -->
         <input type="file" id="fwUploadInput" accept=".bin" style="display:none" />
         <input type="file" id="cfgUploadInput" accept=".txt,.cfg,.ini,.json" style="display:none" />
+        <input type="file" id="sslUploadInput" accept=".pem" style="display:none" />
 
       </div>
     </div>
@@ -379,6 +381,9 @@
     const configOverrides = {}; // Map keys (IPs) to selected config filename (or 'RESET' or '')
     let availableConfigFiles = [];
 
+    const sslOverrides = {};
+    let availableSslFiles = [];
+
     const modelMap = {}; // Map key -> product/model string for grouping
 
     // Initial fetch of firmware list
@@ -412,6 +417,17 @@
       } catch (e) {
         console.error("Failed to fetch config list", e);
       }
+    }
+
+    async function fetchSslList() {
+      try {
+        const res = await fetch('/api/ssl');
+        if (res.ok) {
+          const data = await res.json();
+          availableSslFiles = data.files || [];
+          if (lastResults.length > 0) render(lastResults);
+        }
+      } catch (e) { console.error(e); }
     }
 
     const firmwareText = (r) => {
@@ -483,7 +499,24 @@
 
       options += `<option value="__upload_config__">Upload / Add Config...</option>`;
 
-      return `<select class="form-select form-select-sm cfg-select" data-key="${key}" style="width: 150px;">${options}</select>`;
+      return `<select class="form-select form-select-sm cfg-select" data-key="${key}" style="width: 140px;">${options}</select>`;
+    }
+
+    function createSslSelect(r, key) {
+      const currentSelection = sslOverrides[key] || '';
+      let options = `<option value="" ${currentSelection === '' ? 'selected' : ''}>Do not modify</option>`;
+      options += `<option value="__no_cert__" ${currentSelection === '__no_cert__' ? 'selected' : 'style="color:gray;"'}>No Certificate</option>`;
+
+      if (availableSslFiles.length > 0) {
+        options += `<optgroup label="Available Certs">`;
+        availableSslFiles.forEach(f => {
+          const sel = currentSelection === f.name ? 'selected' : '';
+          options += `<option value="${f.name}" ${sel}>${f.name}</option>`;
+        });
+        options += `</optgroup>`;
+      }
+      options += `<option value="__upload_ssl__">Upload / Add SSL...</option>`;
+      return `<select class="form-select form-select-sm ssl-select" data-key="${key}" style="width: 140px;">${options}</select>`;
     }
 
     function render(results) {
@@ -497,9 +530,10 @@
           r.url ? `<a href="${r.url}" target="_blank" rel="noopener">${r.conn_host}:${r.conn_port}</a>` : (r.ip || ''),
           r.product_name || '',
           (r.mac || '').replace(/_/g, ':'),
-          firmwareText(r),
+          r.firmwareText && firmwareText(r) || '', // Fix: firmwareText(r) is not part of r
           createFirmwareSelect(r, key),
           createConfigSelect(r, key),
+          createSslSelect(r, key),
           r.firmware_status || r.firmware_upload_notes || '',
           r.error_message || ''
         ];
@@ -517,6 +551,7 @@
             { title: 'Firmware Info' },
             { title: 'Firmware Source' },
             { title: 'Config' },
+            { title: 'SSL' },
             { title: 'Notes' },
             { title: 'Error' }
           ],
@@ -626,9 +661,34 @@
           }
         });
 
+        // Dropdown Events (SSL)
+        $('#devicesTable tbody').on('change', '.ssl-select', function () {
+          const val = $(this).val();
+          const key = $(this).data('key');
+          if (val === '__upload_ssl__') {
+            $(this).val(sslOverrides[key] || '');
+            activeUploadKey = key;
+            document.getElementById('sslUploadInput').click();
+            return;
+          }
+          sslOverrides[key] = val;
+          // Propagate
+          const model = modelMap[key];
+          if (model) {
+            Object.keys(modelMap).forEach(k => {
+              if (modelMap[k] === model) {
+                sslOverrides[k] = val;
+                const sel = $(`.ssl-select[data-key="${k}"]`);
+                if (sel.length) sel.val(val);
+              }
+            });
+          }
+        });
+
         // Initial Data Fetch
         fetchFirmwareList();
         fetchConfigList();
+        fetchSslList();
 
       } else {
         table.clear();
@@ -824,10 +884,17 @@
           }
         });
 
+        // Build config overrides
+        const sslOverridesToSend = {};
+        hosts.forEach(ip => {
+          const val = sslOverrides[ip];
+          if (val && val !== '') sslOverridesToSend[ip] = val;
+        });
+
         await fetch('/api/update', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ hosts, firmware_overrides: overrides, config_overrides: confOverrides })
+          body: JSON.stringify({ hosts, firmware_overrides: overrides, config_overrides: confOverrides, ssl_overrides: sslOverridesToSend })
         });
         let running = true;
         while (running) {
@@ -924,6 +991,39 @@
         console.error(e);
         alert('Config upload failed');
       }
+      this.value = '';
+    });
+
+    const sslInput = document.getElementById('sslUploadInput');
+    sslInput.addEventListener('change', async function () {
+      if (!this.files || !this.files[0]) return;
+      const file = this.files[0];
+      try {
+        const res = await fetch('/api/upload_ssl', {
+          method: 'POST',
+          headers: {
+            'X-Filename': file.name,
+            'Content-Type': 'application/octet-stream'
+          },
+          body: file
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const filename = data.filename;
+          if (activeUploadKey) {
+            sslOverrides[activeUploadKey] = filename;
+            const model = modelMap[activeUploadKey];
+            if (model) {
+              Object.keys(modelMap).forEach(k => {
+                if (modelMap[k] === model) sslOverrides[k] = filename;
+              });
+            }
+          }
+          await fetchSslList();
+        } else {
+          alert('SSL upload failed: ' + await res.text());
+        }
+      } catch (e) { console.error(e); alert('SSL upload failed'); }
       this.value = '';
     });
 

@@ -281,6 +281,7 @@ def parse_args() -> Tuple[Namespace, ConfigParser, ConfigParser, str]:
     parser.add_argument('--jsonl-progress', type=str, default=None, help='Write progress events to a JSONL file')
     parser.add_argument('--firmware-config', type=json.loads, default=None, help='JSON mapping of model->{filename, version} to override version.ini')
     parser.add_argument('--custom-config', type=json.loads, default=None, help='JSON mapping of ip->config_filename or "RESET" to override config file selection')
+    parser.add_argument('--custom-ssl', type=json.loads, default=None, help='JSON mapping of ip->ssl_filename to override ssl cert selection')
     _args = parser.parse_args()
 
     log.debug(f"Reading {_args.upload_ini} ...")
@@ -596,7 +597,25 @@ def iterate_list(
             cfg_filename = DeployDev.get_config_filename('config', 'config', 'txt', mac, ip, _args.configip, explicit_filename=explicit_config_file)
             
             log.debug(f"Getting ssl-cert filename for MAC {mac}, IP {ip}...")
-            ssl_cert_filename = DeployDev.get_config_filename('ssl', 'cert', 'pem', mac, ip, _args.configip)
+            
+            # Check for custom ssl override
+            custom_ssl_map = getattr(_args, 'custom_ssl', None) or {}
+            custom_ssl_val = custom_ssl_map.get(ip)
+            if not custom_ssl_val and dev.host in custom_ssl_map:
+                custom_ssl_val = custom_ssl_map[dev.host]
+
+            explicit_ssl_file = None
+            skip_ssl = False
+            if custom_ssl_val == "__no_cert__":
+                skip_ssl = True
+            elif custom_ssl_val:
+                explicit_ssl_file = custom_ssl_val
+
+            if skip_ssl:
+                ssl_cert_filename = None
+                log.info(f"[{ip}] SSL Upload skipped by user request.")
+            else:
+                ssl_cert_filename = DeployDev.get_config_filename('ssl', 'cert', 'pem', mac, ip, _args.configip, explicit_filename=explicit_ssl_file)
 
             # --- before logging/deploy ---
             actual_prod_id = device_data['prodid']
@@ -883,6 +902,7 @@ def run_processing_from_options(
     progress_cb: Optional[Callable[[Dict[str, Any]], None]] = None,
     firmware_config: Optional[Dict[str, Dict[str, str]]] = None,
     custom_config: Optional[Dict[str, str]] = None,
+    custom_ssl: Optional[Dict[str, str]] = None,
 ) -> List[DeviceResult]:
     """
     Programmatic entry-point to run the processing without CLI.
@@ -908,6 +928,7 @@ def run_processing_from_options(
     # Concurrency for programmatic callers
     args.device_concurrency = int(device_concurrency or 1)
     args.custom_config = custom_config
+    args.custom_ssl = custom_ssl
 
     # Read upload.ini
     log.debug(f"[web] Reading {args.upload_ini} ...")

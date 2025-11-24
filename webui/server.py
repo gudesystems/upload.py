@@ -73,7 +73,7 @@ def _run_gbl_query_async():
 
 
 
-def _run_update_selected_async(hosts: list[str], firmware_overrides: Optional[dict] = None, config_overrides: Optional[dict] = None):
+def _run_update_selected_async(hosts: list[str], firmware_overrides: Optional[dict] = None, config_overrides: Optional[dict] = None, ssl_overrides: Optional[dict] = None):
     try:
         State.running = True
         State.progress = {}
@@ -104,7 +104,8 @@ def _run_update_selected_async(hosts: list[str], firmware_overrides: Optional[di
             progress_cb=on_progress,
 
             firmware_config=firmware_overrides,  # Pass overrides to upload logic
-            custom_config=config_overrides       # Pass config overrides
+            custom_config=config_overrides,      # Pass config overrides
+            custom_ssl=ssl_overrides             # Pass SSL overrides
         )
     finally:
         State.running = False
@@ -264,6 +265,63 @@ class Handler(BaseHTTPRequestHandler):
             self._send(500)
             self.wfile.write(b"Internal Server Error saving file")
 
+    def _api_ssl(self):
+        ssl_dir = ROOT / 'ssl'
+        files = []
+        if ssl_dir.is_dir():
+            for f in ssl_dir.glob('*'):
+                if f.is_file(): # List all files in ssl dir
+                    files.append({'name': f.name, 'size': f.stat().st_size})
+        
+        payload = {'files': files}
+        data = json.dumps(payload, default=_json_default).encode('utf-8')
+        self._send(200, {"Content-Type": "application/json; charset=utf-8"})
+        self.wfile.write(data)
+
+    def _api_upload_ssl(self):
+        filename = self.headers.get('X-Filename')
+        if not filename:
+             self._send(400)
+             self.wfile.write(b"Bad Request: X-Filename header missing")
+             return
+
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+        except (ValueError, TypeError):
+             self._send(400)
+             self.wfile.write(b"Bad Request: Invalid Content-Length")
+             return
+
+        if length <= 0:
+            self._send(400)
+            self.wfile.write(b"Bad Request: Empty body")
+            return
+            
+        fn = os.path.basename(filename)
+        save_path = ROOT / 'ssl' / fn
+        
+        # Ensure ssl dir exists
+        (ROOT / 'ssl').mkdir(exist_ok=True)
+        
+        # Read the entire body directly
+        try:
+            with open(save_path, 'wb') as f:
+                remaining = length
+                while remaining > 0:
+                    chunk_size = min(65536, remaining)
+                    chunk = self.rfile.read(chunk_size)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    remaining -= len(chunk)
+                    
+            self._send(200, {"Content-Type": "application/json"})
+            self.wfile.write(json.dumps({"filename": fn, "success": True}).encode('utf-8'))
+        except Exception as e:
+            log.error(f"Error saving ssl upload: {e}")
+            self._send(500)
+            self.wfile.write(b"Internal Server Error saving file")
+
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path
@@ -277,10 +335,13 @@ class Handler(BaseHTTPRequestHandler):
             return self._api_run()
         if path == '/api/firmware':
             return self._api_firmware()
-        if path == '/api/config':
+        elif self.path == '/api/config':
             return self._api_config()
-        self._send(404, {"Content-Type": "text/plain; charset=utf-8"})
-        self.wfile.write(b'Not Found')
+        elif self.path == '/api/ssl':
+            return self._api_ssl()
+        else:
+            self._send(404, {"Content-Type": "text/plain; charset=utf-8"})
+            self.wfile.write(b'Not Found')
 
     def do_POST(self):
         parsed = urlparse(self.path)
@@ -291,10 +352,13 @@ class Handler(BaseHTTPRequestHandler):
             return self._api_run()
         if path == '/api/upload_firmware':
             return self._api_upload_firmware()
-        if path == '/api/upload_config':
+        elif self.path == '/api/upload_config':
             return self._api_upload_config()
-        self._send(404, {"Content-Type": "text/plain; charset=utf-8"})
-        self.wfile.write(b'Not Found')
+        elif self.path == '/api/upload_ssl':
+            return self._api_upload_ssl()
+        else:
+             self._send(404, {"Content-Type": "text/plain; charset=utf-8"})
+             self.wfile.write(b'Not Found')
 
     def _serve_index(self):
         index_path = str(BASE_DIR.joinpath('index.html'))
@@ -420,8 +484,9 @@ class Handler(BaseHTTPRequestHandler):
         
         firmware_overrides = body.get('firmware_overrides')  # Optional dict
         config_overrides = body.get('config_overrides')      # Optional dict
+        ssl_overrides = body.get('ssl_overrides')            # Optional dict
 
-        t = threading.Thread(target=_run_update_selected_async, args=(hosts, firmware_overrides, config_overrides), daemon=True)
+        t = threading.Thread(target=_run_update_selected_async, args=(hosts, firmware_overrides, config_overrides, ssl_overrides), daemon=True)
         t.start()
         payload = {'running': True}
         data = json.dumps(payload).encode('utf-8')
