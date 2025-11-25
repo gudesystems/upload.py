@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from upload import run_processing_from_options, DeviceResult
+from upload import run_processing_from_options, DeviceResult, save_device_to_config, merge_ini_file, generate_ini_export, overwrite_ini_hosts
 
 
 class State:
@@ -65,8 +65,8 @@ def _run_gbl_query_async():
             gbl=True,
             status=True,
             onlineupdate=True,
-            upload_ini="None",
-            version_ini="None"
+            upload_ini="upload.ini",
+            version_ini="version.ini"
         )
     finally:
         State.running = False
@@ -322,6 +322,101 @@ class Handler(BaseHTTPRequestHandler):
             self._send(500)
             self.wfile.write(b"Internal Server Error saving file")
 
+    def _api_add_device(self):
+        try:
+            length = int(self.headers.get('Content-Length', '0') or '0')
+            raw = self.rfile.read(length) if length > 0 else b'{}'
+            body = json.loads(raw.decode('utf-8'))
+            
+            ip = body.get('ip')
+            if not ip:
+                self._send(400)
+                self.wfile.write(b"Missing IP")
+                return
+            
+            # Construct settings dict
+            settings = {
+                'ssl': body.get('ssl', '0'),
+                'auth': body.get('auth', '0'),
+                'username': body.get('username', ''),
+                'password': body.get('password', '')
+            }
+            if 'port' in body and body['port']:
+                settings['port'] = body['port']
+                
+            save_device_to_config(ip, settings)
+            
+            self._send(200, {"Content-Type": "application/json"})
+            self.wfile.write(json.dumps({"success": True, "message": "Device added"}).encode('utf-8'))
+        except Exception as e:
+            log.error(f"Error adding device: {e}")
+            self._send(500)
+            self.wfile.write(b"Internal Error")
+
+    def _api_import_ini(self):
+        filename = self.headers.get('X-Filename')
+        if not filename:
+             self._send(400)
+             return
+
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            if length <= 0:
+                self._send(400)
+                return
+                
+            content = self.rfile.read(length).decode('utf-8', errors='ignore')
+            merge_ini_file(content)
+            
+            self._send(200, {"Content-Type": "application/json"})
+            self.wfile.write(json.dumps({"success": True}).encode('utf-8'))
+        except Exception as e:
+            log.error(f"Error importing INI: {e}")
+            self._send(500)
+            self.wfile.write(b"Internal Error")
+
+    def _api_export_ini(self):
+        try:
+            length = int(self.headers.get('Content-Length', '0') or '0')
+            raw = self.rfile.read(length) if length > 0 else b'{}'
+            body = json.loads(raw.decode('utf-8'))
+            
+            hosts = body.get('hosts', [])
+            export_all = body.get('export_all', False)
+            
+            ini_content = generate_ini_export(selected_keys=hosts, export_all=export_all)
+            
+            self._send(200, {
+                "Content-Type": "application/octet-stream",
+                "Content-Disposition": 'attachment; filename="upload.ini"'
+            })
+            self.wfile.write(ini_content.encode('utf-8'))
+        except Exception as e:
+            log.error(f"Error exporting INI: {e}")
+            self._send(500)
+            self.wfile.write(b"Internal Error")
+
+            self._send(500)
+            self.wfile.write(b"Internal Error")
+
+    def _api_save_ini_selection(self):
+        try:
+            length = int(self.headers.get('Content-Length', '0') or '0')
+            raw = self.rfile.read(length) if length > 0 else b'{}'
+            body = json.loads(raw.decode('utf-8'))
+            
+            hosts = body.get('hosts', [])
+            # 'hosts' should be a list of strings
+            
+            overwrite_ini_hosts(hosts)
+            
+            self._send(200, {"Content-Type": "application/json"})
+            self.wfile.write(json.dumps({"success": True}).encode('utf-8'))
+        except Exception as e:
+            log.error(f"Error saving INI selection: {e}")
+            self._send(500)
+            self.wfile.write(b"Internal Error")
+
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path
@@ -356,6 +451,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._api_upload_config()
         elif self.path == '/api/upload_ssl':
             return self._api_upload_ssl()
+        elif self.path == '/api/add_device':
+            return self._api_add_device()
+        elif self.path == '/api/import_ini':
+            return self._api_import_ini()
+        elif self.path == '/api/export_ini':
+            return self._api_export_ini()
+        elif self.path == '/api/save_ini_selection':
+            return self._api_save_ini_selection()
         else:
              self._send(404, {"Content-Type": "text/plain; charset=utf-8"})
              self.wfile.write(b'Not Found')

@@ -107,6 +107,52 @@
 
 <body>
   <main class="main" id="top">
+    <!-- Add Device Modal -->
+    <div class="modal fade" id="addDeviceModal" tabindex="-1" aria-labelledby="addDeviceModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="addDeviceModalLabel">Add New Device</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <form id="addDeviceForm">
+              <div class="mb-3">
+                <label for="newDevIp" class="form-label">IP Address / Hostname</label>
+                <input type="text" class="form-control" id="newDevIp" required placeholder="192.168.x.x or hostname">
+              </div>
+              <div class="mb-3">
+                <label for="newDevPort" class="form-label">Port (Optional)</label>
+                <input type="number" class="form-control" id="newDevPort" placeholder="80">
+              </div>
+              <div class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" id="newDevSsl">
+                <label class="form-check-label" for="newDevSsl">Use SSL</label>
+              </div>
+              <div class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" id="newDevAuth">
+                <label class="form-check-label" for="newDevAuth">Use Authentication</label>
+              </div>
+              <div id="authFields" style="display:none;">
+                <div class="mb-3">
+                  <label for="newDevUser" class="form-label">Username</label>
+                  <input type="text" class="form-control" id="newDevUser">
+                </div>
+                <div class="mb-3">
+                  <label for="newDevPass" class="form-label">Password</label>
+                  <input type="password" class="form-control" id="newDevPass">
+                </div>
+              </div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button type="button" class="btn btn-primary" onclick="submitNewDevice()">Add Device</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="container" data-layout="container">
       <script>
         var isFluid = JSON.parse(localStorage.getItem('isFluid'));
@@ -331,6 +377,7 @@
         <input type="file" id="fwUploadInput" accept=".bin" style="display:none" />
         <input type="file" id="cfgUploadInput" accept=".txt,.cfg,.ini,.json" style="display:none" />
         <input type="file" id="sslUploadInput" accept=".pem" style="display:none" />
+        <input type="file" id="iniImportInput" accept=".ini,.txt" style="display:none" />
 
       </div>
     </div>
@@ -700,16 +747,18 @@
     function injectToolbarButtons() {
       if (document.getElementById('refreshBtn')) return;
 
-      // Try to find the custom container
-      let container = document.querySelector('#devicesTable_wrapper .dt-top-actions');
+      // Move buttons to the Card Header for better layout stability
+      // Target the card header which contains the "Devices" title
+      let container = document.querySelector('.card-header.d-flex');
 
-      // Fallback: look for the filter div and append after it or inside it
+      // Fallback (though unlikely to fail if HTML structure is static)
+      if (!container) {
+        container = document.querySelector('#devicesTable_wrapper .dt-top-actions');
+      }
+
       if (!container) {
         const filter = document.querySelector('#devicesTable_wrapper .dataTables_filter');
-        if (filter) {
-          // Create a container next to filter if possible, or just use filter
-          container = filter; // fallback to appending to filter line
-        }
+        if (filter) container = filter;
       }
 
       if (!container) {
@@ -717,11 +766,18 @@
         return;
       }
 
+      // Create a wrapper for our buttons to ensure they wrap properly
+      // and don't break the search input line if it's too crowded.
+      var btnGroup = document.createElement('div');
+      // d-inline-flex to sit next to search if possible, flex-wrap to allow wrapping
+      // gap-1 for spacing between buttons
+      btnGroup.className = 'd-inline-flex flex-wrap align-items-center ms-2 gap-1';
+
       // Find Devices
       var searchBtn = document.createElement('button');
       searchBtn.id = 'findBtn';
       searchBtn.type = 'button';
-      searchBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn ms-2';
+      searchBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn';
       searchBtn.innerHTML = '<svg class="fas svg-h-8 me-2" aria-hidden="true" focusable="false" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M505 442.7L405.3 343c28.4-34.9 45.7-79.5 45.7-128C451 96.5 354.5 0 231 0S11 96.5 11 215s96.5 215 220 215c48.5 0 93.1-17.3 128-45.7L442.7 505c9.4 9.4 24.6 9.4 33.9 0l28.3-28.3c9.5-9.4 9.5-24.6.1-33.9zM231 367c-83.7 0-152-68.3-152-152S147.3 63 231 63s152 68.3 152 152-68.3 152-152 152z"></path></svg>Find Devices';
       searchBtn.onclick = runFind;
 
@@ -729,7 +785,7 @@
       var runBtn = document.createElement('button');
       runBtn.id = 'refreshBtn';
       runBtn.type = 'button';
-      runBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn ms-1';
+      runBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn';
       runBtn.innerHTML = '<svg class="fas svg-h-8 me-2" aria-hidden="true" focusable="false" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M370.72 133.28C339.458 104.008 298.888 87.962 255.848 88c-77.458.068-144.328 53.178-162.791 126.85-1.344 5.363-6.122 9.15-11.651 9.15H24.103c-7.498 0-13.194-6.807-11.807-14.176C33.933 94.924 134.813 8 256 8c66.448 0 126.791 26.136 171.315 68.685L463.03 40.97C478.149 25.851 504 36.559 504 57.941V192c0 13.255-10.745 24-24 24H345.941c-21.382 0-32.09-25.851-16.971-40.971l41.75-41.749zM32 296h134.059c21.382 0 32.09 25.851 16.971 40.971l-41.75 41.75c31.262 29.273 71.835 45.319 114.876 45.28 77.418-.07 144.315-53.144 162.787-126.849 1.344-5.363 6.122-9.15 11.651-9.15h57.304c7.498 0 13.194 6.807 11.807 14.176C478.067 417.076 377.187 504 256 504c-66.448 0-126.791-26.136-171.315-68.685L48.97 471.03C33.851 486.149 8 475.441 8 454.059V320c0-13.255 10.745-24 24-24z"></path></svg>Refresh';
       runBtn.onclick = runRefresh;
 
@@ -737,13 +793,52 @@
       var updBtn = document.createElement('button');
       updBtn.id = 'updateBtn';
       updBtn.type = 'button';
-      updBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn ms-1';
+      updBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn';
       updBtn.innerHTML = '<svg class="fas svg-h-8 me-2" aria-hidden="true" focusable="false" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M255.545 8c-66.269.119-126.438 26.233-170.86 68.685L48.971 40.971C33.851 25.851 8 36.559 8 57.941V192c0 13.255 10.745 24 24 24h134.059c21.382 0 32.09-25.851 16.971-40.971l-41.75-41.75c30.864-28.899 70.801-44.907 113.23-45.273 92.398-.798 170.283 73.977 169.484 169.442C423.236 348.009 349.816 424 256 424c-41.127 0-79.997-14.678-110.63-41.556-4.743-4.161-11.906-3.908-16.368.553L89.34 422.659c-4.872 4.872-4.631 12.815.482 17.433C133.798 479.813 192.074 504 256 504c136.966 0 247.999-111.033 248-247.998C504.001 119.193 392.354 7.755 255.545 8z"></path></svg>Update';
       updBtn.onclick = runUpdate;
 
-      container.appendChild(searchBtn);
-      container.appendChild(runBtn);
-      container.appendChild(updBtn);
+      // Add Device
+      var addBtn = document.createElement('button');
+      addBtn.type = 'button';
+      addBtn.className = 'btn fs-10 btn-outline-primary fw-bold dt-toolbar-btn';
+      addBtn.innerHTML = '<span class="fas fa-plus me-1"></span>+';
+      addBtn.title = "Add Single Device";
+      addBtn.onclick = handleAddDevice;
+
+      // Import INI
+      var importBtn = document.createElement('button');
+      importBtn.type = 'button';
+      importBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn';
+      importBtn.innerHTML = '<span class="fas fa-file-import me-1"></span>Import';
+      importBtn.title = "Import upload.ini";
+      importBtn.onclick = handleImport;
+
+      // Export INI
+      var exportBtn = document.createElement('button');
+      exportBtn.type = 'button';
+      exportBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn';
+      exportBtn.innerHTML = '<span class="fas fa-file-export me-1"></span>Export';
+      exportBtn.title = "Export upload.ini";
+      exportBtn.onclick = handleExport;
+
+      // Save Config
+      var saveBtn = document.createElement('button');
+      saveBtn.type = 'button';
+      saveBtn.className = 'btn fs-10 btn-outline-danger fw-bold dt-toolbar-btn';
+      saveBtn.innerHTML = '<span class="fas fa-save me-1"></span>Save Config';
+      saveBtn.title = "Overwrite upload.ini with current selection";
+      saveBtn.onclick = handleSaveIni;
+
+      // Add to group
+      btnGroup.appendChild(searchBtn);
+      btnGroup.appendChild(runBtn);
+      btnGroup.appendChild(updBtn);
+      btnGroup.appendChild(addBtn);
+      btnGroup.appendChild(importBtn);
+      btnGroup.appendChild(exportBtn);
+      btnGroup.appendChild(saveBtn);
+
+      container.appendChild(btnGroup);
 
       // Spinner
       var spinDiv = document.createElement('div');
@@ -1027,9 +1122,165 @@
       this.value = '';
     });
 
+    // INI Import Logic
+    const iniImportInput = document.getElementById('iniImportInput');
+    iniImportInput.addEventListener('change', async function () {
+      if (!this.files || !this.files[0]) return;
+      const file = this.files[0];
+      try {
+        const res = await fetch('/api/import_ini', {
+          method: 'POST',
+          headers: {
+            'X-Filename': file.name,
+            'Content-Type': 'application/octet-stream'
+          },
+          body: file
+        });
+        if (res.ok) {
+          alert('Import successful via merge.');
+          // Refresh devices
+          runRefresh(); // Or fetchDevices() but runRefresh will do a status check too?
+          // Just refreshing list is safer first
+          await fetchDevices();
+        } else {
+          alert('Import failed');
+        }
+      } catch (e) { console.error(e); alert('Import failed'); }
+      this.value = '';
+    });
+
+
+    // --- New Feature Handlers ---
+
+    function handleAddDevice() {
+      // Reset form
+      document.getElementById('addDeviceForm').reset();
+      document.getElementById('authFields').style.display = 'none';
+      var myModal = new bootstrap.Modal(document.getElementById('addDeviceModal'), {});
+      myModal.show();
+    }
+
+    document.getElementById('newDevAuth').addEventListener('change', function () {
+      document.getElementById('authFields').style.display = this.checked ? 'block' : 'none';
+    });
+
+    async function submitNewDevice() {
+      const ip = document.getElementById('newDevIp').value;
+      if (!ip) { alert("IP is required"); return; }
+
+      const payload = {
+        ip: ip,
+        port: document.getElementById('newDevPort').value,
+        ssl: document.getElementById('newDevSsl').checked ? '1' : '0',
+        auth: document.getElementById('newDevAuth').checked ? '1' : '0',
+        username: document.getElementById('newDevUser').value,
+        password: document.getElementById('newDevPass').value
+      };
+
+      try {
+        const res = await fetch('/api/add_device', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          // Close modal
+          const modalEl = document.getElementById('addDeviceModal');
+          const modal = bootstrap.Modal.getInstance(modalEl);
+          modal.hide();
+          // Refresh list via full scan to pick up new device
+          runRefresh();
+        } else {
+          alert("Failed to add device");
+        }
+      } catch (e) {
+        console.error(e);
+        alert("Error adding device");
+      }
+    }
+
+    function handleImport() {
+      document.getElementById('iniImportInput').click();
+    }
+
+    async function handleExport() {
+      const hosts = Array.from(selectedKeys);
+      let exportAll = false;
+
+      if (hosts.length === 0) {
+        if (!confirm("No devices selected. Export ALL devices (Create new INI)?")) {
+          return;
+        }
+        exportAll = true;
+      }
+
+      try {
+        const res = await fetch('/api/export_ini', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hosts: hosts, export_all: exportAll })
+        });
+        if (res.ok) {
+          const blob = await res.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = "upload.ini";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        } else {
+          alert("Export failed");
+        }
+      } catch (e) {
+        console.error(e);
+        alert("Export error");
+      }
+    }
+
+
+    async function handleSaveIni() {
+      const hosts = Array.from(selectedKeys);
+
+      let msg = "Overwrite device list in upload.ini with currently selected devices?";
+      if (hosts.length === 0) {
+        msg = "No devices selected. This will EMPTY the device list in upload.ini. Are you sure?";
+      }
+
+      if (!confirm(msg)) return;
+
+      try {
+        const res = await fetch('/api/save_ini_selection', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hosts: hosts })
+        });
+        if (res.ok) {
+          alert("Configuration saved (upload.ini updated).");
+        } else {
+          alert("Failed to save configuration.");
+        }
+      } catch (e) {
+        console.error(e);
+        alert("Error saving configuration.");
+      }
+    }
+
 
     // Buttons are injected next to the search input when the table initializes
-    fetchDevices();
+    // Auto-load upload.ini at startup:
+    // We call runRefresh but without specific IPs, it normally does GBL.
+    // But we want to 'load' the file. 
+    // The previous 'runRefresh' implementation calls /api/run with gbl=true, status=true.
+    // /api/run now reads upload_ini='upload.ini'.
+    // So calling runRefresh() should effectively load the file AND scan.
+    // Let's ensure the initial fetchDevices also loads from file if possible? 
+    // fetchDevices only reads State.results.
+    // So we should trigger a runRefresh() on load.
+
+    // fetchDevices(); <-- This just gets empty state initially or whatever is in memory.
+    // Instead of just fetchDevices, let's trigger a refresh.
+    runRefresh();
     fetchFirmwareList();
 
     // Vertical menu collapse/open with animation + persistence

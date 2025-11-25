@@ -249,6 +249,196 @@ DEFAULT_SETTINGS = {
     'hosts': {}
 }
 
+def save_device_to_config(section: str, settings: dict, filename: str = 'upload.ini') -> None:
+    """
+    Save or update a device configuration in the INI file.
+    
+    :param section: The section name (e.g. IP address)
+    :param settings: Dictionary of settings for the section
+    :param filename: The INI file to update
+    """
+    config = ConfigParser(strict=False)
+    # Preserve case of keys? ConfigParser defaults to lowercase keys.
+    # To preserve case, we'd need: config.optionxform = str
+    
+    if os.path.exists(filename):
+        config.read(filename)
+    
+    # Ensure hosts section exists and add the device key if it's an IP
+    # We follow the pattern: Section [IP] exists -> add IP to [hosts] as ipX=IP
+    if 'hosts' not in config:
+        config['hosts'] = {}
+    
+    # Check if section already exists in hosts values to avoid duplication
+    # or if we need to add a new ipN key
+    known_hosts = set(config['hosts'].values())
+    if section not in known_hosts:
+        # find next free ipX
+        existing_keys = [k for k in config['hosts'].keys() if k.startswith('ip') and k[2:].isdigit()]
+        next_idx = 1
+        if existing_keys:
+            indices = [int(k[2:]) for k in existing_keys]
+            next_idx = max(indices) + 1
+        config['hosts'][f'ip{next_idx}'] = section
+
+    if section not in config:
+        config[section] = {}
+    
+    for k, v in settings.items():
+        if v is not None:
+             config[section][k] = str(v)
+             
+    with open(filename, 'w') as f:
+        config.write(f)
+
+def merge_ini_file(content: str, target_filename: str = 'upload.ini') -> None:
+    """
+    Merge content from an uploaded INI file into the target INI file.
+    
+    :param content: String content of the uploaded INI
+    :param target_filename: The local INI file to merge into
+    """
+    target = ConfigParser(strict=False)
+    if os.path.exists(target_filename):
+        target.read(target_filename)
+        
+    source = ConfigParser(strict=False)
+    source.read_string(content)
+    
+    # Merge hosts
+    if 'hosts' not in target:
+        target['hosts'] = {}
+
+    # existing target host values
+    existing_hosts = set(target['hosts'].values())
+    
+    # next index for target
+    existing_keys = [k for k in target['hosts'].keys() if k.startswith('ip') and k[2:].isdigit()]
+    next_idx = 1
+    if existing_keys:
+        indices = [int(k[2:]) for k in existing_keys]
+        next_idx = max(indices) + 1
+
+    if 'hosts' in source:
+        for k, v in source['hosts'].items():
+            if v not in existing_hosts:
+                target['hosts'][f'ip{next_idx}'] = v
+                existing_hosts.add(v)
+                next_idx += 1
+                
+    # Merge other sections
+    for section in source.sections():
+        if section == 'hosts':
+            continue
+            
+        if section not in target:
+            target[section] = {}
+        
+        for k, v in source[section].items():
+            target[section][k] = v
+            
+    with open(target_filename, 'w') as f:
+        target.write(f)
+
+def generate_ini_export(selected_keys: List[str] = None, export_all: bool = False, source_filename: str = 'upload.ini') -> str:
+    """
+    Generate an INI string for export.
+    
+    :param selected_keys: List of section names (IPs) to include
+    :param export_all: If True, export all devices found in [hosts]
+    :param source_filename: Source INI file
+    :return: String content of the INI
+    """
+    source = ConfigParser(strict=False)
+    if os.path.exists(source_filename):
+        source.read(source_filename)
+        
+    export = ConfigParser(strict=False)
+    export['hosts'] = {}
+    
+    # Determine which devices to export
+    devices_to_export = []
+    
+    if export_all and 'hosts' in source:
+        # Add all explicitly listed hosts
+        for k, v in source['hosts'].items():
+            # Skip comments or special keys like gbl if purely exporting devices? 
+            # Or export everything? 
+            # Request says "export option to export an upload.ini... (using elements selected...)"
+            # User later said "create new ini (based on devices available in webpage)"
+            if k.startswith('ip') or k.startswith('net'): 
+                devices_to_export.append(v)
+            elif k == 'gbl':
+                 export['hosts']['gbl'] = v
+    elif selected_keys:
+        devices_to_export = selected_keys
+        
+    # Add devices to export [hosts] and copy their sections
+    export_idx = 1
+    for dev in devices_to_export:
+        export['hosts'][f'ip{export_idx}'] = dev
+        export_idx += 1
+        
+        # Copy section if it exists
+        if source.has_section(dev):
+            export[dev] = {}
+            for k, v in source[dev].items():
+                export[dev][k] = v
+                
+    # Copy defaults/httpDefaults if they exist, as they are useful context
+    for common in ['defaults', 'httpDefaults']:
+        if source.has_section(common):
+            export[common] = {}
+            for k, v in source[common].items():
+                export[common][k] = v
+
+    import io
+    output = io.StringIO()
+    export.write(output)
+    return output.getvalue()
+
+
+def overwrite_ini_hosts(hosts_list: List[str], filename: str = 'upload.ini') -> None:
+    """
+    Overwrite the [hosts] section of the INI file with the provided list of hosts.
+    Preserves other sections like [defaults], [httpDefaults], and specific device sections if they exist.
+    
+    :param hosts_list: List of IP strings (or IP:Port) to set as the new hosts list.
+    :param filename: The INI file to update.
+    """
+    config = ConfigParser(strict=False)
+    if os.path.exists(filename):
+        config.read(filename)
+        
+    # Clear existing hosts section or create if missing
+    if 'hosts' not in config:
+        config['hosts'] = {}
+    else:
+        # We want to clear keys in [hosts] but ConfigParser doesn't have clear(), 
+        # so we recreate the section or remove options.
+        # Simplest is to remove section and re-add, but that might change order in file (usually fine).
+        config.remove_section('hosts')
+        config.add_section('hosts')
+        
+    # Add new hosts
+    idx = 1
+    for h in hosts_list:
+        config.set('hosts', f'ip{idx}', h)
+        idx += 1
+        
+    # Note: We do NOT remove sections for devices that are no longer in the list.
+    # The request was to "overwrite the old ini" regarding the SELECTION (device list).
+    # Cleaning up unused sections is complex (is it unused or just not in the list currently?).
+    # Users might want to keep the config for "192.168.1.50" even if it's not currently in the active list.
+    # However, if the user says "so if i select no device at all the upload ini also will be empty",
+    # they probably mean the DEVICE LIST is empty. The config sections are less visible.
+    # Let's stick to updating [hosts].
+        
+    with open(filename, 'w') as f:
+        config.write(f)
+
+
+
 
 def parse_args() -> Tuple[Namespace, ConfigParser, ConfigParser, str]:
     """
@@ -403,7 +593,36 @@ def generate_ip_list(_hosts_config: ConfigParser, _my_ip: str, _gbl_timeout: flo
 
     # Remove duplicates that might have occurred
     _ip_list = sorted(list(set(_ip_list)))
-    return _ip_list
+    
+    # Advanced dedup: remove 'IP' if 'IP:PORT' exists
+    # This prevents duplicates when GBL finds '1.2.3.4' but config has '1.2.3.4:80'
+    final_list = []
+    ip_map = {} # ip -> list of original strings
+    
+    for item in _ip_list:
+        # Handle IPv4 primarily. IPv6 in simple logic might fail split(':') if not careful, 
+        # but code mostly handles IPv4. 
+        if item.count(':') == 1:
+             ip_part = item.split(':')[0]
+        else:
+             ip_part = item
+             
+        if ip_part not in ip_map:
+            ip_map[ip_part] = []
+        ip_map[ip_part].append(item)
+        
+    for ip_part, items in ip_map.items():
+        has_port_variant = any(':' in i for i in items)
+        if has_port_variant:
+            # Keep only those with ports. Discard the "bare" IP (usually from GBL)
+            # as it is likely covered by the explicit config entry.
+            for i in items:
+                if ':' in i:
+                    final_list.append(i)
+        else:
+             final_list.extend(items)
+             
+    return sorted(final_list)
 
 
 @dataclass
