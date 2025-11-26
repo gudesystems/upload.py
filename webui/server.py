@@ -57,17 +57,23 @@ def _json_default(obj):
     return str(obj)
 
 
-def _run_gbl_query_async():
+def _run_gbl_query_async(enable_gbl: bool = True):
     try:
         State.running = True
         State.progress = {}
-        State.results = run_processing_from_options(
-            gbl=True,
-            status=True,
-            onlineupdate=True,
-            upload_ini="upload.ini",
-            version_ini="version.ini"
-        )
+        try:
+            State.results = run_processing_from_options(
+                gbl=enable_gbl,
+                status=True,
+                onlineupdate=True,
+                upload_ini="upload.ini",
+                version_ini="version.ini"
+            )
+        except KeyError:
+            # Occurs if gbl=False and upload.ini has no hosts.
+            # This is expected behavior for correct startup state (empty list).
+            log.warning("No devices found in upload.ini and GBL disabled. Starting with empty list.")
+            State.results = []
     finally:
         State.running = False
 
@@ -530,6 +536,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         # Check for POST data (selected IPs)
+        enable_gbl = True
         if self.command == 'POST':
             length = int(self.headers.get('Content-Length', '0') or '0')
             raw = self.rfile.read(length) if length > 0 else b'{}'
@@ -538,6 +545,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 body = {}
             
+            enable_gbl = body.get('gbl', True)
             hosts: list[str] = []
             if isinstance(body.get('hosts'), list):
                 hosts = [str(x) for x in body['hosts']]
@@ -551,8 +559,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.write(data)
                 return
 
-        # Default GET behavior: GBL query
-        t = threading.Thread(target=_run_gbl_query_async, daemon=True)
+        # Default GET/POST-no-hosts behavior: GBL query
+        t = threading.Thread(target=_run_gbl_query_async, args=(enable_gbl,), daemon=True)
         t.start()
         payload = {'running': True}
         data = json.dumps(payload).encode('utf-8')

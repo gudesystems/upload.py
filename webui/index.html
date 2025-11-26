@@ -821,6 +821,14 @@
       exportBtn.title = "Export upload.ini";
       exportBtn.onclick = handleExport;
 
+      // Delete Device
+      var delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'btn fs-10 btn-outline-danger fw-bold dt-toolbar-btn';
+      delBtn.innerHTML = '<span class="fas fa-trash me-1"></span>Delete';
+      delBtn.title = "Delete selected from view";
+      delBtn.onclick = handleDelete;
+
       // Save Config
       var saveBtn = document.createElement('button');
       saveBtn.type = 'button';
@@ -836,6 +844,7 @@
       btnGroup.appendChild(addBtn);
       btnGroup.appendChild(importBtn);
       btnGroup.appendChild(exportBtn);
+      btnGroup.appendChild(delBtn);
       btnGroup.appendChild(saveBtn);
 
       container.appendChild(btnGroup);
@@ -911,7 +920,9 @@
       // Finally block removed as updateSpinner handles enabling via polling result
     }
 
-    async function runRefresh() {
+    async function runRefresh(enableGbl = true) {
+      if (typeof enableGbl !== 'boolean') enableGbl = true; // Default to true if event object passed
+
       try {
         const hosts = Array.from(selectedKeys);
         if (hosts.length > 0) {
@@ -922,8 +933,13 @@
             body: JSON.stringify({ hosts })
           });
         } else {
-          // Run global GBL search
-          await fetch('/api/run');
+          // Run global search/status
+          // Pass gbl flag
+          await fetch('/api/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ gbl: enableGbl })
+          });
         }
 
         let running = true;
@@ -1267,20 +1283,32 @@
     }
 
 
-    // Buttons are injected next to the search input when the table initializes
+    async function handleDelete() {
+      const hosts = Array.from(selectedKeys);
+      if (hosts.length === 0) {
+        alert("No devices selected to delete.");
+        return;
+      }
+
+      if (!confirm(`Remove ${hosts.length} device(s) from the list? (Changes are only saved to INI if you click 'Save Config')`)) return;
+
+      // Remove from table
+      table.rows(function (idx, data, node) {
+        // data is array: [checkbox, status, ip, ...]
+        // Checkbox HTML: data-key="IP"
+        const html = data[0];
+        const m = html.match(/data-key="([^"]+)"/);
+        if (m && selectedKeys.has(m[1])) return true;
+        return false;
+      }).remove().draw();
+
+      selectedKeys.clear();
+      $('#selectAllHead').prop('checked', false);
+    }
     // Auto-load upload.ini at startup:
     // We call runRefresh but without specific IPs, it normally does GBL.
-    // But we want to 'load' the file. 
-    // The previous 'runRefresh' implementation calls /api/run with gbl=true, status=true.
-    // /api/run now reads upload_ini='upload.ini'.
-    // So calling runRefresh() should effectively load the file AND scan.
-    // Let's ensure the initial fetchDevices also loads from file if possible? 
-    // fetchDevices only reads State.results.
-    // So we should trigger a runRefresh() on load.
-
-    // fetchDevices(); <-- This just gets empty state initially or whatever is in memory.
-    // Instead of just fetchDevices, let's trigger a refresh.
-    runRefresh();
+    // We now pass enableGbl=false to ONLY load from INI and check status, skipping UDP broadcast.
+    runRefresh(false);
     fetchFirmwareList();
 
     // Vertical menu collapse/open with animation + persistence
