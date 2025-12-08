@@ -85,13 +85,16 @@ def _run_update_selected_async(hosts: list[str], firmware_overrides: Optional[di
         State.progress = {}
         
         def on_progress(evt):
-            # evt: { "ip": ..., "type": "progress", "progress": 50, "status": ... }
-            if evt.get("type") == "progress":
+            # evt: { "ip": ..., "type": "progress"/"device_done", ... }
+            typ = evt.get("type")
+            if typ in ("progress", "device_done"):
                 ip = evt.get("ip")
                 if ip:
                     if ip not in State.progress:
                         State.progress[ip] = {}
                     State.progress[ip].update(evt)
+                    if typ == "device_done":
+                        State.progress[ip]["progress"] = 100
 
         # Build devices mapping like: { 'hosts': { 'ip1': 'host:port', 'ip2': 'host:port', ... } }
         devices = {'hosts': {}}

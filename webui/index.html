@@ -356,13 +356,9 @@
                     <th style="width:1%; text-align:center;"><input type="checkbox" id="selectAll"
                         aria-label="Select all" /></th>
                     <th>Status</th>
-                    <th>IP</th>
-                    <th>Product</th>
-                    <th>MAC</th>
+                    <th>Device Info</th>
                     <th>Firmware Info</th>
-                    <th>Firmware Source</th>
-                    <th>Config</th>
-                    <th>SSL</th>
+                    <th>Settings</th>
                     <th>Notes</th>
                     <th>Error</th>
                   </tr>
@@ -571,17 +567,40 @@
         const key = rowKey(r);
         const checked = selectedKeys.has(key) ? 'checked' : '';
         const checkbox = `<input type="checkbox" class="row-select" data-key="${key}" ${checked} />`;
+
+        // Merged Device Info: Product (Bold) <br> MAC <br> IP Link
+        const deviceInfo = `
+          <div class="d-flex flex-column">
+            <span class="fw-bold">${r.product_name || 'Unknown'}</span>
+            <span class="text-600 fs-10">${(r.mac || '').replace(/_/g, ':')}</span>
+            ${r.url ? `<a href="${r.url}" class="text-decoration-none" target="_blank" rel="noopener">${r.conn_host}:${r.conn_port}</a>` : (r.ip || '')}
+          </div>`;
+
+        // Merged Settings: FW <br> Config <br> SSL
+        // Using flex for alignment
+        const settings = `
+          <div class="d-flex flex-column gap-1">
+             <div class="d-flex align-items-center">
+               <span class="text-700 fs-10" style="width:45px">FW:</span>
+               ${createFirmwareSelect(r, key)}
+             </div>
+             <div class="d-flex align-items-center">
+               <span class="text-700 fs-10" style="width:45px">Cfg:</span>
+               ${createConfigSelect(r, key)}
+             </div>
+             <div class="d-flex align-items-center">
+               <span class="text-700 fs-10" style="width:45px">SSL:</span>
+               ${createSslSelect(r, key)}
+             </div>
+          </div>`;
+
         return [
           checkbox,
-          r.success ? '✓' : '✗',
-          r.url ? `<a href="${r.url}" target="_blank" rel="noopener">${r.conn_host}:${r.conn_port}</a>` : (r.ip || ''),
-          r.product_name || '',
-          (r.mac || '').replace(/_/g, ':'),
-          r.firmwareText && firmwareText(r) || '', // Fix: firmwareText(r) is not part of r
-          createFirmwareSelect(r, key),
-          createConfigSelect(r, key),
-          createSslSelect(r, key),
-          r.firmware_status || r.firmware_upload_notes || '',
+          r.success ? '✓' : '✗', // Status (Hidden)
+          deviceInfo,
+          firmwareText(r),
+          settings,
+          `<div class="text-primary fw-bold">${r.firmware_status || r.firmware_upload_notes || ''}</div>`,
           r.error_message || ''
         ];
       });
@@ -591,14 +610,10 @@
           data: rows,
           columns: [
             { title: '<div class="form-check mb-0"><input class="form-check-input" id="selectAllHead" type="checkbox" aria-label="Select all" /></div>', orderable: false, searchable: false, className: 'text-center', width: '1%' },
-            { title: 'Status' },
-            { title: 'IP' },
-            { title: 'Product' },
-            { title: 'MAC' },
+            { title: 'Status', visible: false }, // Hidden as requested
+            { title: 'Device Info' },
             { title: 'Firmware Info' },
-            { title: 'Firmware Source' },
-            { title: 'Config' },
-            { title: 'SSL' },
+            { title: 'Settings', orderable: false },
             { title: 'Notes' },
             { title: 'Error' }
           ],
@@ -866,9 +881,12 @@
 
       // Update results with progress info if running
       results.forEach(r => {
-        const key = r.ip; // IP is key in progress map
-        if (progressMap[key]) {
-          const prog = progressMap[key];
+        let prog = progressMap[r.ip];
+        if (!prog && r.conn_host && progressMap[r.conn_host]) {
+          prog = progressMap[r.conn_host];
+        }
+
+        if (prog) {
           if (prog.status && String(prog.status).startsWith('Rebooting')) {
             r.firmware_status = prog.status;
             r.firmware_upload_notes = '';
@@ -877,6 +895,10 @@
             r.firmware_upload_notes = prog.status || 'uploading';
           } else if (prog.status === 'checking') {
             r.firmware_status = 'Checking...';
+          } else {
+            // Completed or other status (progress 100%)
+            r.firmware_status = prog.status;
+            if (prog.error) r.error_message = prog.error;
           }
         }
       });
