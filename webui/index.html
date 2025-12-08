@@ -153,6 +153,41 @@
       </div>
     </div>
 
+    <!-- Update Confirmation Modal -->
+    <div class="modal fade" id="updateConfirmModal" tabindex="-1" aria-labelledby="updateConfirmModalLabel"
+      aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="updateConfirmModalLabel">Confirm Update</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <p>Are you sure you want to update the following devices?</p>
+            <div class="table-responsive">
+              <table class="table table-sm table-striped user-select-none">
+                <thead>
+                  <tr>
+                    <th>IP / Host</th>
+                    <th>Firmware</th>
+                    <th>Config</th>
+                    <th>SSL</th>
+                  </tr>
+                </thead>
+                <tbody id="updateConfirmTableBody">
+                  <!-- JS populates this -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-primary" onclick="finalizeUpdate()">Confirm & Update</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="container" data-layout="container">
       <script>
         var isFluid = JSON.parse(localStorage.getItem('isFluid'));
@@ -594,13 +629,17 @@
              </div>
           </div>`;
 
+
+        const noteText = r.firmware_status || r.firmware_upload_notes || '';
+        const noteClass = (noteText === 'status only, no changes made') ? 'text-secondary' : 'text-primary fw-bold';
+
         return [
           checkbox,
           r.success ? '✓' : '✗', // Status (Hidden)
           deviceInfo,
           firmwareText(r),
           settings,
-          `<div class="text-primary fw-bold">${r.firmware_status || r.firmware_upload_notes || ''}</div>`,
+          `<div class="${noteClass}">${noteText}</div>`,
           r.error_message || ''
         ];
       });
@@ -801,30 +840,31 @@
       runBtn.id = 'refreshBtn';
       runBtn.type = 'button';
       runBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn';
-      runBtn.innerHTML = '<svg class="fas svg-h-8 me-2" aria-hidden="true" focusable="false" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M370.72 133.28C339.458 104.008 298.888 87.962 255.848 88c-77.458.068-144.328 53.178-162.791 126.85-1.344 5.363-6.122 9.15-11.651 9.15H24.103c-7.498 0-13.194-6.807-11.807-14.176C33.933 94.924 134.813 8 256 8c66.448 0 126.791 26.136 171.315 68.685L463.03 40.97C478.149 25.851 504 36.559 504 57.941V192c0 13.255-10.745 24-24 24H345.941c-21.382 0-32.09-25.851-16.971-40.971l41.75-41.749zM32 296h134.059c21.382 0 32.09 25.851 16.971 40.971l-41.75 41.75c31.262 29.273 71.835 45.319 114.876 45.28 77.418-.07 144.315-53.144 162.787-126.849 1.344-5.363 6.122-9.15 11.651-9.15h57.304c7.498 0 13.194 6.807 11.807 14.176C478.067 417.076 377.187 504 256 504c-66.448 0-126.791-26.136-171.315-68.685L48.97 471.03C33.851 486.149 8 475.441 8 454.059V320c0-13.255 10.745-24 24-24z"></path></svg>Refresh';
+      //runBtn.innerHTML = '<svg class="fas svg-h-8 me-2" aria-hidden="true" focusable="false" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M370.72 133.28C339.458 104.008 298.888 87.962 255.848 88c-77.458.068-144.328 53.178-162.791 126.85-1.344 5.363-6.122 9.15-11.651 9.15H24.103c-7.498 0-13.194-6.807-11.807-14.176C33.933 94.924 134.813 8 256 8c66.448 0 126.791 26.136 171.315 68.685L463.03 40.97C478.149 25.851 504 36.559 504 57.941V192c0 13.255-10.745 24-24 24H345.941c-21.382 0-32.09-25.851-16.971-40.971l41.75-41.749zM32 296h134.059c21.382 0 32.09 25.851 16.971 40.971l-41.75 41.75c31.262 29.273 71.835 45.319 114.876 45.28 77.418-.07 144.315-53.144 162.787-126.849 1.344-5.363 6.122-9.15 11.651-9.15h57.304c7.498 0 13.194 6.807 11.807 14.176C478.067 417.076 377.187 504 256 504c-66.448 0-126.791-26.136-171.315-68.685L48.97 471.03C33.851 486.149 8 475.441 8 454.059V320c0-13.255 10.745-24 24-24z"></path></svg>Refresh';
+      runBtn.innerHTML = '';
       runBtn.onclick = runRefresh;
-
-      // Update
-      var updBtn = document.createElement('button');
-      updBtn.id = 'updateBtn';
-      updBtn.type = 'button';
-      updBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn';
-      updBtn.innerHTML = '<svg class="fas svg-h-8 me-2" aria-hidden="true" focusable="false" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M255.545 8c-66.269.119-126.438 26.233-170.86 68.685L48.971 40.971C33.851 25.851 8 36.559 8 57.941V192c0 13.255 10.745 24 24 24h134.059c21.382 0 32.09-25.851 16.971-40.971l-41.75-41.75c30.864-28.899 70.801-44.907 113.23-45.273 92.398-.798 170.283 73.977 169.484 169.442C423.236 348.009 349.816 424 256 424c-41.127 0-79.997-14.678-110.63-41.556-4.743-4.161-11.906-3.908-16.368.553L89.34 422.659c-4.872 4.872-4.631 12.815.482 17.433C133.798 479.813 192.074 504 256 504c136.966 0 247.999-111.033 248-247.998C504.001 119.193 392.354 7.755 255.545 8z"></path></svg>Update';
-      updBtn.onclick = runUpdate;
 
       // Add Device
       var addBtn = document.createElement('button');
       addBtn.type = 'button';
-      addBtn.className = 'btn fs-10 btn-outline-primary fw-bold dt-toolbar-btn';
-      addBtn.innerHTML = '<span class="fas fa-plus me-1"></span>+';
+      addBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn';
+      addBtn.innerHTML = '<span class="fas fa-plus me-1"></span>Add Device';
       addBtn.title = "Add Single Device";
       addBtn.onclick = handleAddDevice;
+
+      // Delete Device
+      var delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn'; //btn-outline-danger
+      delBtn.innerHTML = '<span class="fas fa-trash me-1"></span>Delete Device';
+      delBtn.title = "Delete selected from view";
+      delBtn.onclick = handleDelete;
 
       // Import INI
       var importBtn = document.createElement('button');
       importBtn.type = 'button';
       importBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn';
-      importBtn.innerHTML = '<span class="fas fa-file-import me-1"></span>Import';
+      importBtn.innerHTML = '<span class="fas fa-file-import me-1"></span>Import Device List';
       importBtn.title = "Import upload.ini";
       importBtn.onclick = handleImport;
 
@@ -832,35 +872,35 @@
       var exportBtn = document.createElement('button');
       exportBtn.type = 'button';
       exportBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn';
-      exportBtn.innerHTML = '<span class="fas fa-file-export me-1"></span>Export';
+      exportBtn.innerHTML = '<span class="fas fa-file-export me-1"></span>Export Device List';
       exportBtn.title = "Export upload.ini";
       exportBtn.onclick = handleExport;
-
-      // Delete Device
-      var delBtn = document.createElement('button');
-      delBtn.type = 'button';
-      delBtn.className = 'btn fs-10 btn-outline-danger fw-bold dt-toolbar-btn';
-      delBtn.innerHTML = '<span class="fas fa-trash me-1"></span>Delete';
-      delBtn.title = "Delete selected from view";
-      delBtn.onclick = handleDelete;
 
       // Save Config
       var saveBtn = document.createElement('button');
       saveBtn.type = 'button';
-      saveBtn.className = 'btn fs-10 btn-outline-danger fw-bold dt-toolbar-btn';
-      saveBtn.innerHTML = '<span class="fas fa-save me-1"></span>Save Config';
+      saveBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn';
+      saveBtn.innerHTML = '<span class="fas fa-save me-1"></span>Save Device List';
       saveBtn.title = "Overwrite upload.ini with current selection";
       saveBtn.onclick = handleSaveIni;
 
+      // Update
+      var updBtn = document.createElement('button');
+      updBtn.id = 'updateBtn';
+      updBtn.type = 'button';
+      updBtn.className = 'btn fs-10 btn-outline-primary fw-bold dt-toolbar-btn';
+      updBtn.innerHTML = '<svg class="fas svg-h-8 me-2" aria-hidden="true" focusable="false" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M255.545 8c-66.269.119-126.438 26.233-170.86 68.685L48.971 40.971C33.851 25.851 8 36.559 8 57.941V192c0 13.255 10.745 24 24 24h134.059c21.382 0 32.09-25.851 16.971-40.971l-41.75-41.75c30.864-28.899 70.801-44.907 113.23-45.273 92.398-.798 170.283 73.977 169.484 169.442C423.236 348.009 349.816 424 256 424c-41.127 0-79.997-14.678-110.63-41.556-4.743-4.161-11.906-3.908-16.368.553L89.34 422.659c-4.872 4.872-4.631 12.815.482 17.433C133.798 479.813 192.074 504 256 504c136.966 0 247.999-111.033 248-247.998C504.001 119.193 392.354 7.755 255.545 8z"></path></svg>Update';
+      updBtn.onclick = runUpdate;
+
       // Add to group
       btnGroup.appendChild(searchBtn);
-      btnGroup.appendChild(runBtn);
-      btnGroup.appendChild(updBtn);
+      //btnGroup.appendChild(runBtn);
       btnGroup.appendChild(addBtn);
+      btnGroup.appendChild(delBtn);
       btnGroup.appendChild(importBtn);
       btnGroup.appendChild(exportBtn);
-      btnGroup.appendChild(delBtn);
       btnGroup.appendChild(saveBtn);
+      btnGroup.appendChild(updBtn);
 
       container.appendChild(btnGroup);
 
@@ -974,6 +1014,8 @@
       }
     }
 
+    let pendingUpdateData = null;
+
     async function runUpdate() {
       try {
         const hosts = Array.from(selectedKeys);
@@ -982,53 +1024,129 @@
           return;
         }
 
-        // Construct firmware_overrides map: ModelID -> {filename, version}
-        // backend expects: firmware_overrides = { "ModelSection": { "filename": "x.bin", "version": "force..." } }
-        // Problem: We only know keys (IPs) -> filename. We need to map to ModelID (section in version.ini).
-
-        // We need to request the 'selected_prodid' from the list of results to map correctly.
-        // Let's scroll through the current data source of the table?
-        const currentData = table.data().toArray(); // Arrays of data... raw data objects are not stored directly in table().data() API usually returns processed unless configured.
-        // Actually, we are updating the entire list via render(results). We can access the last 'results' array if we store it globally.
-        // BUT, we have modelMap[key] which stores `selected_prodid || product_name`. 
-        // Ideally `selected_prodid` is what we want.
-
-        // Build firmware overrides
+        // Prepare data for the review dialog
+        // We need to build the overrides AND the table rows for display
         const overrides = {};
+        const confOverrides = {};
+        const sslOverridesToSend = {};
+
+        const reviewRows = [];
+
         hosts.forEach(ip => {
-          const source = firmwareOverrides[ip];
-          if (source && source !== 'onlineupdate') {
+          // Get basic info for the table
+          // We need to find the row data in 'lastResults' to be accurate or modelMap
+          // Let's use lastResults to find the matching result object
+          const rowData = lastResults.find(r => rowKey(r) === ip) || { ip: ip, product_name: 'Unknown' };
+
+          // Firmware Logic
+          const fwSource = firmwareOverrides[ip];
+          let fwDisplay = "Online Update"; // default
+          let fwAction = "onlineupdate";
+
+          if (fwSource) {
+            if (fwSource === '__no_update__') {
+              fwDisplay = '<span class="text-400">No Change</span>';
+              fwAction = '__no_update__'; // Will be filtered out/handled as no-op if logic supports it, or we just don't add to overrides?
+              // Actually existing logic: if overrides exists, we use it. If not in overrides, it might default?
+              // The backend logic: if firmware_overrides is provided, it looks up the model.
+              // We need to be careful. 'onlineupdate' is default.
+            } else if (fwSource === 'onlineupdate') {
+              fwDisplay = "Online Update";
+              fwAction = 'onlineupdate';
+            } else {
+              fwDisplay = `<span class="fw-bold text-primary">${fwSource}</span>`;
+              fwAction = fwSource;
+            }
+          }
+
+          if (fwAction !== 'onlineupdate' && fwAction !== '__no_update__' && fwAction) {
             const modelID = modelMap[ip];
             if (modelID) {
               overrides[modelID] = {
-                "filename": source,
+                "filename": fwAction,
                 "version": "custom_selection_" + new Date().getTime()
               };
             }
           }
-        });
 
-        // Build config overrides
-        const confOverrides = {};
-        hosts.forEach(ip => {
-          const val = configOverrides[ip];
-          if (val && val !== '') {
-            confOverrides[ip] = val;
+          // Config Logic
+          const cfgSource = configOverrides[ip];
+          let cfgDisplay = '<span class="text-400">No Change</span>';
+          if (cfgSource) {
+            if (cfgSource === 'RESET') {
+              cfgDisplay = '<span class="text-danger fw-bold">Factory Reset</span>';
+              confOverrides[ip] = 'RESET';
+            } else if (cfgSource !== '') {
+              cfgDisplay = `<span class="fw-bold text-primary">${cfgSource}</span>`;
+              confOverrides[ip] = cfgSource;
+            }
           }
+
+          // SSL Logic
+          const sslSource = sslOverrides[ip];
+          let sslDisplay = '<span class="text-400">No Change</span>';
+          if (sslSource) {
+            if (sslSource === '__no_cert__') {
+              sslDisplay = '<span class="text-muted">No Certificate</span>';
+              sslOverridesToSend[ip] = '__no_cert__';
+            } else if (sslSource !== '') {
+              sslDisplay = `<span class="fw-bold text-primary">${sslSource}</span>`;
+              sslOverridesToSend[ip] = sslSource;
+            }
+          }
+
+          reviewRows.push(`
+            <tr>
+              <td>
+                <div class="fw-bold">${rowData.product_name || 'Unknown'}</div>
+                <div class="fs-10 text-600">${ip}</div>
+              </td>
+              <td>${fwDisplay}</td>
+              <td>${cfgDisplay}</td>
+              <td>${sslDisplay}</td>
+            </tr>
+          `);
         });
 
-        // Build config overrides
-        const sslOverridesToSend = {};
-        hosts.forEach(ip => {
-          const val = sslOverrides[ip];
-          if (val && val !== '') sslOverridesToSend[ip] = val;
-        });
+        // Populate table
+        document.getElementById('updateConfirmTableBody').innerHTML = reviewRows.join('');
 
+        // Store payload for final execution
+        pendingUpdateData = {
+          hosts,
+          firmware_overrides: overrides,
+          config_overrides: confOverrides,
+          ssl_overrides: sslOverridesToSend
+        };
+
+        // Show Modal
+        var myModal = new bootstrap.Modal(document.getElementById('updateConfirmModal'), {});
+        myModal.show();
+
+      } catch (e) {
+        console.error(e);
+        alert('Error preparing update review.');
+      }
+    }
+
+    async function finalizeUpdate() {
+      if (!pendingUpdateData) return;
+
+      // Hide modal
+      const modalEl = document.getElementById('updateConfirmModal');
+      const modal = bootstrap.Modal.getInstance(modalEl);
+      if (modal) modal.hide();
+
+      try {
         await fetch('/api/update', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ hosts, firmware_overrides: overrides, config_overrides: confOverrides, ssl_overrides: sslOverridesToSend })
+          body: JSON.stringify(pendingUpdateData)
         });
+
+        pendingUpdateData = null; // Clear
+
+        // Start polling
         let running = true;
         while (running) {
           running = await fetchDevices();
