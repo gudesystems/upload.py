@@ -14,7 +14,7 @@
   <script src="/assets/config.js"></script>
   <style>
     .logo {
-      background-image: url('/assets/gude.svg');
+      background-image: url('/assets/gude_only-logo.svg');
       background-repeat: no-repeat;
       background-position: left center;
       background-size: contain;
@@ -657,6 +657,7 @@
             { title: 'Error' }
           ],
           pageLength: 10,
+          lengthMenu: [[5, 10, 25, 50, -1], [5, 10, 25, 50, "All"]],
           // Layout: Top-left filter; bottom info (left), length (center), pagination (right)
           // Note: using 'dom' to create a split header: search on left, actions on right
           dom: "<'row dt-top text-start'<'col-sm-12 col-md-6'f><'col-sm-12 col-md-6 text-end dt-top-actions'>>" +

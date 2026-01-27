@@ -1228,7 +1228,7 @@ def run_processing_from_options(
 
     # Build IP list and run processing
     add_iprange_to_config(args.iprange, config)
-    ip_list = generate_ip_list(config, my_ip, float(config.get('defaults', 'gblTimeout', fallback=1.0)))
+    ip_list = generate_ip_list(config, my_ip, float(config.get('defaults', 'gblTimeout', fallback=2.0)))
     results = iterate_list(ip_list, firmware, config, args, progress_cb=progress_cb)
     return results
 

@@ -352,6 +352,10 @@ class Handler(BaseHTTPRequestHandler):
             }
             if 'port' in body and body['port']:
                 settings['port'] = body['port']
+                # Create unique section key for same host with different ports
+                # If ip doesn't already have the port and port is provided
+                if ':' not in ip:
+                    ip = f"{ip}:{body['port']}"
                 
             save_device_to_config(ip, settings)
             
