@@ -607,6 +607,7 @@
         const deviceInfo = `
           <div class="d-flex flex-column">
             <span class="fw-bold">${r.product_name || 'Unknown'}</span>
+            <span class="text-700 fs-10">${r.hostname || '-'}</span>
             <span class="text-600 fs-10">${(r.mac || '').replace(/_/g, ':')}</span>
             ${r.url ? `<a href="${r.url}" class="text-decoration-none" target="_blank" rel="noopener">${r.conn_host}:${r.conn_port}</a>` : (r.ip || '')}
           </div>`;
@@ -1100,6 +1101,7 @@
             <tr>
               <td>
                 <div class="fw-bold">${rowData.product_name || 'Unknown'}</div>
+                <div class="fs-10 text-700">${rowData.hostname || '-'}</div>
                 <div class="fs-10 text-600">${ip}</div>
               </td>
               <td>${fwDisplay}</td>

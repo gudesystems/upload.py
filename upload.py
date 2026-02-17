@@ -631,6 +631,7 @@ class DeviceResult:
     product_name: str
     mac: str
     initial_firmware: str
+    hostname: Optional[str] = None
     # Connection details for UI linking
     conn_host: Optional[str] = None
     conn_port: Optional[int] = None
@@ -766,6 +767,7 @@ def iterate_list(
                 return result
 
             result.product_name = device_data['product_name']
+            result.hostname = device_data.get('hostname')
             result.initial_firmware = device_data['firm_v']
 
             gbl_error = False
