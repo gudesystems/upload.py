@@ -93,6 +93,43 @@ def _parse_specific_model_from_product_name(product_name: str) -> Optional[str]:
         return None
 
 
+def _extract_model_candidates_from_product_name(product_name: str, rev_suffix: str = "") -> List[str]:
+    """
+    Extract likely model ids from product_name.
+    Examples:
+    - "Expert Power Control 8045" -> ["8045", "8045R2"] (if rev_suffix="R2")
+    - "Expert Power Control 87-1230-18" -> ["871230", "871230R2"] (if rev_suffix="R2")
+    """
+    cands: List[str] = []
+    if not isinstance(product_name, str) or not product_name.strip():
+        return cands
+
+    try:
+        # Keep existing EPC87 family handling.
+        specific_87 = _parse_specific_model_from_product_name(product_name)
+        if specific_87:
+            cands.append(specific_87)
+            if rev_suffix:
+                cands.append(f"{specific_87}{rev_suffix}")
+
+        # Generic model tokens: 4-6 consecutive digits often represent model ids.
+        for tok in re.findall(r"\b\d{4,6}\b", product_name):
+            cands.append(tok)
+            if rev_suffix:
+                cands.append(f"{tok}{rev_suffix}")
+    except Exception:
+        return cands
+
+    # Deduplicate while preserving order
+    seen = set()
+    out: List[str] = []
+    for c in cands:
+        if c not in seen:
+            seen.add(c)
+            out.append(c)
+    return out
+
+
 def _version_key(v: str) -> tuple:
     """Turn a version like '1.2.3' or '1.2.3-R2' into a sortable key."""
     if not isinstance(v, str):
@@ -123,7 +160,8 @@ def resolve_prodid(
     if not actual_prodid:
         return None, None
 
-    sections = set(firmware_cfg.sections())
+    sections = list(firmware_cfg.sections())
+    sections_set = set(sections)
     # case-insensitive lookup map for sections
     sec_lc_map: Dict[str, str] = {s.lower(): s for s in sections}
 
@@ -138,7 +176,7 @@ def resolve_prodid(
     ap_l = actual_prodid.strip()
 
     # 1) Exact match (case-insensitive convenience)
-    if ap_l in sections:
+    if ap_l in sections_set:
         return ap_l, get_ver(ap_l)
     if ap_l.lower() in sec_lc_map:
         sec = sec_lc_map[ap_l.lower()]
@@ -147,7 +185,7 @@ def resolve_prodid(
     # 2) Apply replacement map
     if repl_map and ap_l in repl_map:
         cand = repl_map[ap_l]
-        if cand in sections:
+        if cand in sections_set:
             return cand, get_ver(cand)
         if cand.lower() in sec_lc_map:
             sec = sec_lc_map[cand.lower()]
@@ -159,9 +197,12 @@ def resolve_prodid(
     selected_ver: Optional[str] = None
 
     if has_wildcard:
+        rev_m = re.search(r"(R\d+)$", ap_l, flags=re.IGNORECASE)
+        rev_suffix = rev_m.group(1).upper() if rev_m else ""
+
         # 3a) Try to specialize via product_name (e.g. 871x10 -> 871230)
         specific = _parse_specific_model_from_product_name(product_name or '')
-        if specific and specific in sections:
+        if specific and specific in sections_set:
             selected = specific
             selected_ver = get_ver(specific)
         else:
@@ -173,11 +214,22 @@ def resolve_prodid(
             pat = re.compile(f"^{pat_str}$")
             matches = [sec for sec in sections if pat.match(sec)]
             if matches:
+                # Prefer concrete model parsed from product_name when available.
+                for cand in _extract_model_candidates_from_product_name(product_name or '', rev_suffix=rev_suffix):
+                    sec = sec_lc_map.get(cand.lower())
+                    if sec and sec in matches:
+                        selected = sec
+                        selected_ver = get_ver(sec)
+                        break
+                if selected:
+                    return selected, selected_ver
+
                 # Prefer the one with highest version number if available
                 best = None
                 best_ver_key = None
                 best_ver_str = None
-                for sec in matches:
+                # Sort for deterministic tie-breaking across runs.
+                for sec in sorted(matches):
                     ver = get_ver(sec)
                     key = _version_key(ver) if ver else (0,)
                     if best is None or key > best_ver_key:  # type: ignore
@@ -189,7 +241,7 @@ def resolve_prodid(
 
         # 3c) If nothing found but a family alias section exists (e.g., '871x10' in version.ini), use it
         if not selected:
-            if ap_l in sections:
+            if ap_l in sections_set:
                 selected = ap_l
                 selected_ver = get_ver(ap_l)
             elif ap_l.lower() in sec_lc_map:
@@ -199,6 +251,55 @@ def resolve_prodid(
 
     # 4) Return what we have (may still be None)
     return selected, selected_ver
+
+
+def find_offline_compatible_prodid(
+    *,
+    selected_prodid: str,
+    firmware_cfg: ConfigParser,
+    fw_dir_default: str,
+) -> Optional[str]:
+    """
+    Offline fallback for shared firmware families.
+    If selected_prodid's local firmware file is missing, try compatible sections
+    in the same 2-digit family and same revision suffix (e.g. 80xxR2).
+    Returns replacement section name or None.
+    """
+    if not selected_prodid or not firmware_cfg.has_section(selected_prodid):
+        return None
+
+    m = re.match(r"^(\d{2})\d{2}(R\d+)$", selected_prodid, flags=re.IGNORECASE)
+    if not m:
+        return None
+
+    fam_prefix = m.group(1)
+    rev_suffix = m.group(2).upper()
+    fam_pat = re.compile(rf"^{re.escape(fam_prefix)}\d{{2}}{re.escape(rev_suffix)}$", flags=re.IGNORECASE)
+
+    def local_file_exists(sec: str) -> bool:
+        try:
+            if not firmware_cfg.has_section(sec):
+                return False
+            version = firmware_cfg.get(sec, 'version', fallback='').strip()
+            filename_tpl = firmware_cfg.get(sec, 'filename', fallback='').strip()
+            if not version or not filename_tpl:
+                return False
+            filename = filename_tpl.replace('{version}', version)
+            fw_dir = firmware_cfg.get(sec, 'path', fallback=fw_dir_default)
+            return os.path.isfile(os.path.join(fw_dir, filename))
+        except Exception:
+            return False
+
+    if local_file_exists(selected_prodid):
+        return None
+
+    candidates = [sec for sec in firmware_cfg.sections() if fam_pat.match(sec)]
+    for sec in sorted(candidates):
+        if sec == selected_prodid:
+            continue
+        if local_file_exists(sec):
+            return sec
+    return None
 
 
 def add_devices_to_config(_args: Namespace, _config: ConfigParser) -> ConfigParser:
@@ -848,6 +949,23 @@ def iterate_list(
                 firmware_cfg=_firmware,
                 repl_map=repl_map,
             )
+            # Offline fallback: if resolved section has no local file, try compatible
+            # same-family entries (e.g. 80xxR2) that do have a local file.
+            if selected_prod_id and not _args.onlineupdate:
+                fw_dir_default = _config.get('defaults', 'fwdir', fallback='fw')
+                fallback_prodid = find_offline_compatible_prodid(
+                    selected_prodid=selected_prod_id,
+                    firmware_cfg=_firmware,
+                    fw_dir_default=fw_dir_default,
+                )
+                if fallback_prodid:
+                    log.info(f"[{ip}] Offline fallback: using compatible firmware section '{fallback_prodid}' instead of '{selected_prod_id}'")
+                    selected_prod_id = fallback_prodid
+                    selected_version = _firmware.get(selected_prod_id, 'version', fallback=selected_version)
+                    if result.firmware_upload_notes:
+                        result.firmware_upload_notes += f"; offline fallback -> {selected_prod_id}"
+                    else:
+                        result.firmware_upload_notes = f"offline fallback -> {selected_prod_id}"
             # update device_data and log
             if selected_prod_id:
                 device_data["prodid"] = selected_prod_id # Update prodid for update_firmware call
@@ -1240,8 +1358,8 @@ if __name__ == "__main__":  # Ensure this runs only when script is executed dire
     if len(sys.argv) <= 1:
         try:
             from webui.server import serve
-            # Bind on all interfaces but open browser to localhost
-            serve(host='0.0.0.0', port=8000, open_browser=True)
+            # Bind only on localhost and open browser to localhost
+            serve(host='127.0.0.1', port=8000, open_browser=True)
         except Exception as e:
             print(f"Failed to start Web UI server: {e}")
     else:

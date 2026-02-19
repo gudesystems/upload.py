@@ -612,7 +612,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
 
-def serve(host: str = '0.0.0.0', port: int = 8000, *, open_browser: bool = False):
+def serve(host: str = '127.0.0.1', port: int = 8000, *, open_browser: bool = False):
     httpd = ThreadingHTTPServer((host, port), Handler)
     url = f"http://localhost:{port}"
     print(f"Web UI available at http://{host}:{port}")

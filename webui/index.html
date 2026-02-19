@@ -533,10 +533,16 @@
       return r.selected_prodid || r.product_name || "Unknown";
     }
 
+    function getChangeTargets(changedKey) {
+      // If edited row is selected, apply to all selected rows; otherwise only to edited row.
+      if (selectedKeys.has(changedKey) && selectedKeys.size > 0) {
+        return Array.from(selectedKeys);
+      }
+      return [changedKey];
+    }
+
     function createFirmwareSelect(r, key) {
       const currentSelection = firmwareOverrides[key] || 'onlineupdate';
-      const model = getModelGroup(r);
-      modelMap[key] = model; // Track model for this key
 
       let options = `<option value="onlineupdate" ${currentSelection === 'onlineupdate' ? 'selected' : ''}>Online Update (Default)</option>`;
       options += `<option value="__no_update__" ${currentSelection === '__no_update__' ? 'selected' : 'style="color:gray;"'}>No Update</option>`;
@@ -600,6 +606,9 @@
     function render(results) {
       const rows = results.map(r => {
         const key = rowKey(r);
+        const model = getModelGroup(r);
+        modelMap[key] = model;
+        const modelEncoded = encodeURIComponent(model || "Unknown");
         const checked = selectedKeys.has(key) ? 'checked' : '';
         const checkbox = `<input type="checkbox" class="row-select" data-key="${key}" ${checked} />`;
 
@@ -607,6 +616,8 @@
         const deviceInfo = `
           <div class="d-flex flex-column">
             <span class="fw-bold">${r.product_name || 'Unknown'}</span>
+            <a href="#" class="model-link badge rounded-pill bg-light text-dark border text-decoration-none align-self-start mt-1"
+               data-key="${key}" data-model="${modelEncoded}" title="Select all devices with this model">${model || 'Unknown'}</a>
             <span class="text-700 fs-10">${r.hostname || '-'}</span>
             <span class="text-600 fs-10">${(r.mac || '').replace(/_/g, ':')}</span>
             ${r.url ? `<a href="${r.url}" class="text-decoration-none" target="_blank" rel="noopener">${r.conn_host}:${r.conn_port}</a>` : (r.ip || '')}
@@ -711,6 +722,21 @@
           if (this.checked) selectedKeys.add(key); else selectedKeys.delete(key);
           updateHeaderSelectAllState();
         });
+        $('#devicesTable tbody').on('click', '.model-link', function (e) {
+          e.preventDefault();
+          const model = decodeURIComponent(String($(this).data('model') || ''));
+          const key = String($(this).data('key') || '');
+          if (!model) return;
+
+          selectedKeys.clear();
+          Object.keys(modelMap).forEach(k => {
+            if (modelMap[k] === model) selectedKeys.add(k);
+          });
+          if (key) selectedKeys.add(key);
+
+          syncVisibleCheckboxes();
+          updateHeaderSelectAllState();
+        });
         $('#devicesTable').on('draw.dt', function () {
           syncVisibleCheckboxes();
           updateHeaderSelectAllState();
@@ -726,18 +752,12 @@
             document.getElementById('fwUploadInput').click();
             return;
           }
-          firmwareOverrides[key] = val;
-          // Propagate to same model
-          const model = modelMap[key];
-          if (model) {
-            Object.keys(modelMap).forEach(k => {
-              if (modelMap[k] === model) {
-                firmwareOverrides[k] = val;
-                const sel = $(`.fw-select[data-key="${k}"]`);
-                if (sel.length) sel.val(val);
-              }
-            });
-          }
+          const targets = getChangeTargets(key);
+          targets.forEach(k => {
+            firmwareOverrides[k] = val;
+            const sel = $(`.fw-select[data-key="${k}"]`);
+            if (sel.length) sel.val(val);
+          });
         });
 
         // Dropdown Events (Config)
@@ -750,18 +770,12 @@
             document.getElementById('cfgUploadInput').click();
             return;
           }
-          configOverrides[key] = val;
-          // Propagate
-          const model = modelMap[key];
-          if (model) {
-            Object.keys(modelMap).forEach(k => {
-              if (modelMap[k] === model) {
-                configOverrides[k] = val;
-                const sel = $(`.cfg-select[data-key="${k}"]`);
-                if (sel.length) sel.val(val);
-              }
-            });
-          }
+          const targets = getChangeTargets(key);
+          targets.forEach(k => {
+            configOverrides[k] = val;
+            const sel = $(`.cfg-select[data-key="${k}"]`);
+            if (sel.length) sel.val(val);
+          });
         });
 
         // Dropdown Events (SSL)
@@ -774,18 +788,12 @@
             document.getElementById('sslUploadInput').click();
             return;
           }
-          sslOverrides[key] = val;
-          // Propagate
-          const model = modelMap[key];
-          if (model) {
-            Object.keys(modelMap).forEach(k => {
-              if (modelMap[k] === model) {
-                sslOverrides[k] = val;
-                const sel = $(`.ssl-select[data-key="${k}"]`);
-                if (sel.length) sel.val(val);
-              }
-            });
-          }
+          const targets = getChangeTargets(key);
+          targets.forEach(k => {
+            sslOverrides[k] = val;
+            const sel = $(`.ssl-select[data-key="${k}"]`);
+            if (sel.length) sel.val(val);
+          });
         });
 
         // Initial Data Fetch
@@ -1186,15 +1194,8 @@
           // Refresh list
           // Update overrides FIRST, then refresh list which triggers render
           if (activeUploadKey) {
-            firmwareOverrides[activeUploadKey] = filename;
-            const model = modelMap[activeUploadKey];
-            if (model) {
-              Object.keys(modelMap).forEach(k => {
-                if (modelMap[k] === model) {
-                  firmwareOverrides[k] = filename;
-                }
-              });
-            }
+            const targets = getChangeTargets(activeUploadKey);
+            targets.forEach(k => { firmwareOverrides[k] = filename; });
           }
 
           await fetchFirmwareList();
@@ -1226,15 +1227,8 @@
           const filename = data.filename;
 
           if (activeUploadKey) {
-            configOverrides[activeUploadKey] = filename;
-            const model = modelMap[activeUploadKey];
-            if (model) {
-              Object.keys(modelMap).forEach(k => {
-                if (modelMap[k] === model) {
-                  configOverrides[k] = filename;
-                }
-              });
-            }
+            const targets = getChangeTargets(activeUploadKey);
+            targets.forEach(k => { configOverrides[k] = filename; });
           }
 
           await fetchConfigList();
@@ -1265,13 +1259,8 @@
           const data = await res.json();
           const filename = data.filename;
           if (activeUploadKey) {
-            sslOverrides[activeUploadKey] = filename;
-            const model = modelMap[activeUploadKey];
-            if (model) {
-              Object.keys(modelMap).forEach(k => {
-                if (modelMap[k] === model) sslOverrides[k] = filename;
-              });
-            }
+            const targets = getChangeTargets(activeUploadKey);
+            targets.forEach(k => { sslOverrides[k] = filename; });
           }
           await fetchSslList();
         } else {

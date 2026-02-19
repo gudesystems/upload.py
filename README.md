@@ -103,6 +103,14 @@ The script now offers more options for finding and selecting firmware:
 
 - Enhanced `--onlineupdate` now fetches the complete version.ini file from the web, making the `-v` parameter and local version.ini file optional in this mode.
 
+- Wildcard product IDs (for example `80xxR2`) are resolved deterministically:
+  - The resolver first prefers the concrete model variant parsed from the device product name (for example `8031-3` -> `8031R2`).
+  - If no concrete variant can be derived, candidates are processed in stable order to avoid run-to-run randomness.
+
+- Offline compatibility fallback for shared binaries:
+  - In offline mode, if the resolved section's firmware file is missing locally, the resolver tries compatible sections in the same family/revision (for example `80xxR2`) and uses the first section that has an existing local firmware file.
+  - This allows updates to proceed when models share one binary but only one variant file is available locally.
+
 ### Device Processing Summary
 
 Upon completion, the script now provides a "Device Processing Summary" that gives clear feedback on the status of each device update operation.
