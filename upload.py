@@ -577,7 +577,11 @@ def parse_args() -> Tuple[Namespace, ConfigParser, ConfigParser, str]:
 
     log.debug(f"Reading {_args.upload_ini} ...")
     _config = ConfigParser(strict=False)
-    _config.read(_args.upload_ini)
+    _read_files = _config.read(_args.upload_ini)
+    _args.upload_ini_found = bool(_read_files)
+    if not _args.upload_ini_found:
+        log.warning(f"No upload.ini configuration found at '{_args.upload_ini}'.")
+        log.warning("Provide hosts in upload.ini, enable 'gbl=search', use '--gbl', or pass '--iprange'.")
 
     if _args.gbl:
         log.debug(f"Detected GBL search flag, adding to config ...")
@@ -613,7 +617,13 @@ def parse_args() -> Tuple[Namespace, ConfigParser, ConfigParser, str]:
     return _args, _config, _firmware, _my_ip
 
 
-def add_iprange_to_config(_iprange: Optional[List[str]], _config: ConfigParser): # Type hint for _iprange
+def add_iprange_to_config(
+    _iprange: Optional[List[str]],
+    _config: ConfigParser,
+    *,
+    upload_ini_found: Optional[bool] = None,
+    web_mode: bool = False,
+): # Type hint for _iprange
     """
     Function that adds hosts from args to hosts in _config (parsed hosts from upload.ini)
     :param str _iprange: ip, ip-sub-net OR hostname
@@ -634,9 +644,23 @@ def add_iprange_to_config(_iprange: Optional[List[str]], _config: ConfigParser):
             _config['hosts'][f'iprange_{i}'] = ip_val # Store in 'hosts' section
     else:
         if 'hosts' not in _config or not _config['hosts']: # Check if 'hosts' section is empty or not present
-            log.error("no EPC/PDU device IP address(es) given.\n"
-                      "\tPlease try to enable 'gbl=search' or 'ip1=192.168.0.1' in your upload.ini,\n"
-                      "\tand/or give an IP address or subnet by --iprange parameter\n")
+            error_lines = ["no EPC/PDU device IP address(es) given."]
+            if upload_ini_found is False:
+                error_lines.append("\tNo upload.ini configuration was found; no device list could be loaded.")
+            else:
+                error_lines.append("\tNo devices are configured in upload.ini.")
+
+            if web_mode:
+                error_lines.append("\tPlease enable 'gbl=search' in upload.ini or use 'Find Devices' in GUI,")
+                error_lines.append("\tand/or give an IP address or subnet by --iprange parameter")
+            else:
+                error_lines.append("\tPlease try to enable 'gbl=search' or 'ip1=192.168.0.1' in your upload.ini,")
+                error_lines.append("\tand/or give an IP address or subnet by --iprange parameter")
+
+            _log_fn = log.warning if web_mode else log.error
+            _log_fn("\n".join(error_lines) + "\n")
+            if upload_ini_found is False:
+                raise KeyError("Missing upload.ini configuration and no device target was provided.")
             raise KeyError("Missing required args, could not determine device!")
 
 
@@ -1155,7 +1179,7 @@ def main() -> None:
     args, config, firmware, my_ip = parse_args()
 
     # parsing hosts
-    add_iprange_to_config(args.iprange, config)
+    add_iprange_to_config(args.iprange, config, upload_ini_found=getattr(args, 'upload_ini_found', None), web_mode=False)
 
     # Pass the 'hosts' section of config, not the whole config object
     ip_list = generate_ip_list(config, my_ip, float(config.get('defaults', 'gblTimeout', fallback=1.0)))
@@ -1272,7 +1296,19 @@ def run_processing_from_options(
     # Read upload.ini
     log.debug(f"[web] Reading {args.upload_ini} ...")
     config = ConfigParser(strict=False)
-    config.read(args.upload_ini)
+    read_files = config.read(args.upload_ini)
+    args.upload_ini_found = bool(read_files)
+    if not args.upload_ini_found:
+        has_host_overrides = (
+            isinstance(args.devices, dict) and
+            isinstance(args.devices.get('hosts'), dict) and
+            len(args.devices.get('hosts', {})) > 0
+        )
+        if has_host_overrides:
+            log.debug(f"[web] No upload.ini configuration found at '{args.upload_ini}'. Using API-provided hosts.")
+        else:
+            log.warning(f"[web] No upload.ini configuration found at '{args.upload_ini}'.")
+            log.warning("[web] Provide hosts in upload.ini, enable 'gbl=search', or use 'Find Devices' in GUI.")
 
     # Handle GBL flag similar to CLI path
     if args.gbl:
@@ -1347,7 +1383,12 @@ def run_processing_from_options(
     my_ip = config['defaults']['myIp'] if 'myIp' in config['defaults'] else '0.0.0.0'
 
     # Build IP list and run processing
-    add_iprange_to_config(args.iprange, config)
+    add_iprange_to_config(
+        args.iprange,
+        config,
+        upload_ini_found=getattr(args, 'upload_ini_found', None),
+        web_mode=True,
+    )
     ip_list = generate_ip_list(config, my_ip, float(config.get('defaults', 'gblTimeout', fallback=2.0)))
     results = iterate_list(ip_list, firmware, config, args, progress_cb=progress_cb)
     return results

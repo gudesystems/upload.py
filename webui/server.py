@@ -69,10 +69,17 @@ def _run_gbl_query_async(enable_gbl: bool = True):
                 upload_ini="upload.ini",
                 version_ini="version.ini"
             )
-        except KeyError:
+        except KeyError as e:
             # Occurs if gbl=False and upload.ini has no hosts.
             # This is expected behavior for correct startup state (empty list).
-            log.warning("No devices found in upload.ini and GBL disabled. Starting with empty list.")
+            upload_ini_path = Path("upload.ini")
+            if not upload_ini_path.is_file():
+                log.warning("No upload.ini configuration provided (upload.ini not found). Starting with empty list.")
+                log.warning("Use 'Find Devices' in GUI, or create upload.ini with hosts and/or 'gbl=search'.")
+            else:
+                log.warning("No devices configured in upload.ini and GBL disabled. Starting with empty list.")
+                log.warning("Use 'Find Devices' in GUI, or enable 'gbl=search' in upload.ini.")
+            log.debug(f"Initial device discovery skipped: {e}")
             State.results = []
     finally:
         State.running = False
