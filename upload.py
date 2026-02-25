@@ -2,7 +2,7 @@
 
 from configparser import ConfigParser
 from datetime import date
-from argparse import ArgumentParser, Namespace
+from argparse import ArgumentParser, Namespace, RawDescriptionHelpFormatter
 import os
 import sys
 import ipaddress
@@ -553,7 +553,19 @@ def parse_args() -> Tuple[Namespace, ConfigParser, ConfigParser, str]:
     :rtype: Tuple[Namespace, ConfigParser, ConfigParser, str]
     """
     log.debug("Parsing args ...")
-    parser = ArgumentParser()
+    parser = ArgumentParser(
+        description="Gude Systems firmware/config uploader (CLI + WebUI).",
+        formatter_class=RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  1) List devices via UDP/GBL broadcast (status only):\n"
+            "     upload.py -S -G\n"
+            "  2) Update one device using online firmware:\n"
+            "     upload.py -o -i 192.168.2.99\n"
+            "  3) Start Web UI (no parameters):\n"
+            "     upload.py\n"
+        ),
+    )
     parser.add_argument('-c', '--configip', help='ip address to select config')
     parser.add_argument('-f', '--forcefw', help='upload fw even if already up to date', action="store_true")
     parser.add_argument('-u', '--upload_ini', help='upload.ini paramater set', default='upload.ini')
