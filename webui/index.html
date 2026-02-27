@@ -102,6 +102,22 @@
     .spinner.visible {
       display: inline-block;
     }
+
+    .draft-banner {
+      display: none;
+    }
+
+    .draft-banner.show {
+      display: block;
+    }
+
+    .host-preview-list {
+      max-height: 240px;
+      overflow: auto;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: .8rem;
+      white-space: pre;
+    }
   </style>
 </head>
 
@@ -188,6 +204,77 @@
       </div>
     </div>
 
+    <!-- Import Preview Modal -->
+    <div class="modal fade" id="importPreviewModal" tabindex="-1" aria-labelledby="importPreviewModalLabel"
+      aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="importPreviewModalLabel">Import Device List (Draft)</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <p class="mb-2" id="importPreviewSummary"></p>
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="radio" name="importMode" id="importModeMerge" value="merge"
+                checked>
+              <label class="form-check-label" for="importModeMerge">Merge into current draft selection</label>
+            </div>
+            <div class="form-check mb-3">
+              <input class="form-check-input" type="radio" name="importMode" id="importModeReplace" value="replace">
+              <label class="form-check-label" for="importModeReplace">Replace current draft selection</label>
+            </div>
+            <div class="border rounded bg-body-tertiary p-2 host-preview-list" id="importPreviewHosts"></div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-primary" onclick="applyImportToDraft()">Apply to Draft</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Export Options Modal -->
+    <div class="modal fade" id="exportOptionsModal" tabindex="-1" aria-labelledby="exportOptionsModalLabel"
+      aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="exportOptionsModalLabel">Export Device List</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <p class="mb-2" id="exportOptionsSummary">Choose what to export.</p>
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="radio" name="exportMode" id="exportModeDraftSelection"
+                value="draft_selection" checked>
+              <label class="form-check-label" for="exportModeDraftSelection" id="exportModeDraftSelectionLabel">
+                Draft (Selection)
+              </label>
+            </div>
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="radio" name="exportMode" id="exportModeDraftAll"
+                value="draft_all">
+              <label class="form-check-label" for="exportModeDraftAll" id="exportModeDraftAllLabel">
+                Draft (All)
+              </label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="exportMode" id="exportModeUploadIni"
+                value="upload_ini">
+              <label class="form-check-label" for="exportModeUploadIni">
+                upload.ini (On Disk)
+              </label>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-primary" onclick="finalizeExport()">Export</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="container" data-layout="container">
       <script>
         var isFluid = JSON.parse(localStorage.getItem('isFluid'));
@@ -262,7 +349,7 @@
               </li>
               <li class="nav-item mt-3 px-3 sidebar-meta">
                 <div class="fs-10 text-700">Product: Gude Upload</div>
-                <div class="fs-10 text-700">Version: 0.0.3</div>
+                <div class="fs-10 text-700">Version: 0.0.2e</div>
                 <div class="fs-10 text-600">© Gude Systems</div>
               </li>
             </ul>
@@ -383,6 +470,15 @@
           <div class="card-header d-flex flex-between-center">
             <h5 class="mb-0">Devices</h5>
           </div>
+          <div id="draftBanner" class="alert alert-warning mx-3 mt-3 mb-0 py-2 draft-banner" role="alert">
+            <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2">
+              <div id="draftBannerText" class="mb-0">Unsaved changes</div>
+              <div class="btn-group btn-group-sm">
+                <button type="button" class="btn btn-warning" onclick="handleSaveIni()">Apply Device List</button>
+                <button type="button" class="btn btn-outline-secondary" onclick="discardDraftHosts()">Discard Draft</button>
+              </div>
+            </div>
+          </div>
           <div class="bg-body-tertiary p-3 rounded-bottom-2">
             <div class="table-responsive">
               <table id="devicesTable" class="table table-striped mb-0">
@@ -451,6 +547,8 @@
     })();
     let table;
     const selectedKeys = new Set();
+    let persistedHosts = new Set();
+    let pendingImportHosts = [];
     let lastResults = [];
 
     const firmwareOverrides = {}; // Map keys (IPs) to selected filename (or 'onlineupdate')
@@ -463,6 +561,266 @@
     let availableSslFiles = [];
 
     const modelMap = {}; // Map key -> product/model string for grouping
+
+    function normalizeHostKey(v) {
+      return String(v || '').trim();
+    }
+
+    function dedupeHosts(hosts) {
+      const out = [];
+      const seen = new Set();
+      (hosts || []).forEach(h => {
+        const key = normalizeHostKey(h);
+        if (!key || seen.has(key)) return;
+        seen.add(key);
+        out.push(key);
+      });
+      return out;
+    }
+
+    function getAllDraftHosts() {
+      const fromResults = (lastResults || []).map(r => rowKey(r)).filter(Boolean);
+      return dedupeHosts([...Array.from(selectedKeys), ...fromResults]);
+    }
+
+    function parseHostsFromIniText(content) {
+      const hosts = [];
+      const lines = String(content || '').split(/\r?\n/);
+      let inHostsSection = false;
+
+      lines.forEach(raw => {
+        const line = raw.trim();
+        if (!line || line.startsWith(';') || line.startsWith('#')) return;
+
+        const sec = line.match(/^\[(.+)\]$/);
+        if (sec) {
+          inHostsSection = (sec[1] || '').trim().toLowerCase() === 'hosts';
+          return;
+        }
+        if (!inHostsSection) return;
+
+        const eq = line.indexOf('=');
+        const colon = line.indexOf(':');
+        let sep = eq;
+        if (sep < 0 || (colon >= 0 && colon < sep)) sep = colon;
+        if (sep <= 0) return;
+
+        const key = line.slice(0, sep).trim().toLowerCase();
+        let value = line.slice(sep + 1).trim();
+        value = value.replace(/\s[;#].*$/, '').trim();
+        if (!value) return;
+
+        if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+          value = value.slice(1, -1).trim();
+        }
+
+        if (key.startsWith('ip') || key.startsWith('net') || key === 'gbl') {
+          hosts.push(value);
+        }
+      });
+
+      return dedupeHosts(hosts);
+    }
+
+    function makeDraftPlaceholder(host) {
+      const isGblSearch = String(host).toLowerCase() === 'search';
+      return {
+        ip: host,
+        product_name: isGblSearch ? 'GBL Search Entry' : 'Draft Device',
+        hostname: '',
+        mac: '',
+        initial_firmware: '',
+        latest_known_firmware: '',
+        latest_publish_date: '',
+        selected_prodid: '',
+        status_only: true,
+        final_firmware: '',
+        firmware_status: 'draft entry (not queried)',
+        firmware_upload_notes: '',
+        success: true,
+        error_message: '',
+        conn_host: null,
+        conn_port: null,
+        conn_ssl: null,
+        url: null
+      };
+    }
+
+    function ensureResultsContainHosts(results, hosts) {
+      const out = Array.isArray(results) ? results.slice() : [];
+      const existing = new Set(out.map(r => rowKey(r)));
+      dedupeHosts(hosts).forEach(host => {
+        if (!existing.has(host)) {
+          out.push(makeDraftPlaceholder(host));
+          existing.add(host);
+        }
+      });
+      return out;
+    }
+
+    function updateDraftBanner() {
+      const banner = document.getElementById('draftBanner');
+      const text = document.getElementById('draftBannerText');
+      if (!banner || !text) return;
+
+      const draft = new Set(Array.from(selectedKeys));
+      const added = Array.from(draft).filter(h => !persistedHosts.has(h));
+      const removed = Array.from(persistedHosts).filter(h => !draft.has(h));
+      const dirty = added.length > 0 || removed.length > 0;
+
+      if (!dirty) {
+        banner.classList.remove('show');
+        text.textContent = '';
+        return;
+      }
+
+      text.textContent = `Unsaved host-list changes: +${added.length} added, -${removed.length} removed.`;
+      banner.classList.add('show');
+    }
+
+    async function loadPersistedHostsFromDisk() {
+      try {
+        const res = await fetch('/api/export_ini', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hosts: [], export_all: true })
+        });
+        if (!res.ok) return;
+
+        const iniText = await res.text();
+        const hosts = parseHostsFromIniText(iniText);
+        persistedHosts = new Set(hosts);
+        selectedKeys.clear();
+        hosts.forEach(h => selectedKeys.add(h));
+        updateDraftBanner();
+      } catch (e) {
+        console.error('Failed to load host list from upload.ini', e);
+      }
+    }
+
+    function showImportPreview(hosts, filename) {
+      pendingImportHosts = dedupeHosts(hosts);
+      const draftCount = selectedKeys.size;
+      const mergeSet = new Set([...Array.from(selectedKeys), ...pendingImportHosts]);
+      const summary = document.getElementById('importPreviewSummary');
+      const hostBox = document.getElementById('importPreviewHosts');
+      const mergeRadio = document.getElementById('importModeMerge');
+      if (mergeRadio) mergeRadio.checked = true;
+
+      if (summary) {
+        summary.textContent =
+          `File: ${filename} | Imported hosts: ${pendingImportHosts.length} | ` +
+          `Draft now: ${draftCount} | Draft after merge: ${mergeSet.size}`;
+      }
+      if (hostBox) {
+        hostBox.textContent = pendingImportHosts.join('\n');
+      }
+
+      const modalEl = document.getElementById('importPreviewModal');
+      const modal = new bootstrap.Modal(modalEl, {});
+      modal.show();
+    }
+
+    function showExportOptions() {
+      const selectedCount = selectedKeys.size;
+      const allDraftHosts = getAllDraftHosts();
+      const allDraftCount = allDraftHosts.length;
+      const summary = document.getElementById('exportOptionsSummary');
+      const draftSelLabel = document.getElementById('exportModeDraftSelectionLabel');
+      const draftAllLabel = document.getElementById('exportModeDraftAllLabel');
+      const selRadio = document.getElementById('exportModeDraftSelection');
+      if (summary) {
+        summary.textContent = `Draft selection: ${selectedCount} host(s), Draft all: ${allDraftCount} host(s).`;
+      }
+      if (draftSelLabel) draftSelLabel.textContent = `Draft (Selection: ${selectedCount})`;
+      if (draftAllLabel) draftAllLabel.textContent = `Draft (All: ${allDraftCount})`;
+      if (selRadio) selRadio.checked = true;
+
+      const modalEl = document.getElementById('exportOptionsModal');
+      const modal = new bootstrap.Modal(modalEl, {});
+      modal.show();
+    }
+
+    async function finalizeExport() {
+      const modeEl = document.querySelector('input[name="exportMode"]:checked');
+      const mode = modeEl ? modeEl.value : 'draft_selection';
+
+      let hosts = [];
+      let exportAll = false;
+
+      if (mode === 'draft_selection') {
+        hosts = dedupeHosts(Array.from(selectedKeys));
+        if (hosts.length === 0) {
+          alert('No selected hosts to export.');
+          return;
+        }
+      } else if (mode === 'draft_all') {
+        hosts = getAllDraftHosts();
+        if (hosts.length === 0) {
+          alert('No draft hosts to export.');
+          return;
+        }
+      } else {
+        exportAll = true;
+      }
+
+      try {
+        const res = await fetch('/api/export_ini', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hosts: hosts, export_all: exportAll })
+        });
+        if (res.ok) {
+          const blob = await res.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = "upload.ini";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        } else {
+          alert("Export failed");
+        }
+      } catch (e) {
+        console.error(e);
+        alert("Export error");
+      } finally {
+        const modalEl = document.getElementById('exportOptionsModal');
+        const modal = bootstrap.Modal.getInstance(modalEl);
+        if (modal) modal.hide();
+      }
+    }
+
+    function applyImportToDraft() {
+      if (!pendingImportHosts || pendingImportHosts.length === 0) return;
+
+      const modeEl = document.querySelector('input[name="importMode"]:checked');
+      const mode = modeEl ? modeEl.value : 'merge';
+
+      if (mode === 'replace') selectedKeys.clear();
+      pendingImportHosts.forEach(h => selectedKeys.add(h));
+
+      lastResults = ensureResultsContainHosts(lastResults, Array.from(selectedKeys));
+      render(lastResults);
+      updateDraftBanner();
+
+      const modalEl = document.getElementById('importPreviewModal');
+      const modal = bootstrap.Modal.getInstance(modalEl);
+      if (modal) modal.hide();
+
+      alert(`Imported ${pendingImportHosts.length} host entries into draft. Click 'Apply Device List' to persist to upload.ini.`);
+      pendingImportHosts = [];
+    }
+
+    function discardDraftHosts() {
+      if (!confirm('Discard unsaved draft host-list changes and revert to upload.ini?')) return;
+      selectedKeys.clear();
+      persistedHosts.forEach(h => selectedKeys.add(h));
+      lastResults = ensureResultsContainHosts(lastResults, Array.from(selectedKeys));
+      render(lastResults);
+      updateDraftBanner();
+    }
 
     // Initial fetch of firmware list
     async function fetchFirmwareList() {
@@ -524,8 +882,9 @@
     };
 
     function rowKey(r) {
+      if (r.ip) return String(r.ip);
       if (r.conn_host && r.conn_port) return `${r.conn_host}:${r.conn_port}`;
-      return r.ip || '';
+      return '';
     }
 
     function getModelGroup(r) {
@@ -716,11 +1075,13 @@
           keys.forEach(k => { if (checked) selectedKeys.add(k); else selectedKeys.delete(k); });
           syncVisibleCheckboxes();
           updateHeaderSelectAllState();
+          updateDraftBanner();
         });
         $('#devicesTable').on('change', 'tbody input.row-select', function () {
           const key = this.getAttribute('data-key') || '';
           if (this.checked) selectedKeys.add(key); else selectedKeys.delete(key);
           updateHeaderSelectAllState();
+          updateDraftBanner();
         });
         $('#devicesTable tbody').on('click', '.model-link', function (e) {
           e.preventDefault();
@@ -736,6 +1097,7 @@
 
           syncVisibleCheckboxes();
           updateHeaderSelectAllState();
+          updateDraftBanner();
         });
         $('#devicesTable').on('draw.dt', function () {
           syncVisibleCheckboxes();
@@ -875,7 +1237,7 @@
       importBtn.type = 'button';
       importBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn';
       importBtn.innerHTML = '<span class="fas fa-file-import me-1"></span>Import Device List';
-      importBtn.title = "Import upload.ini";
+      importBtn.title = "Import into draft selection (preview first)";
       importBtn.onclick = handleImport;
 
       // Export INI
@@ -883,15 +1245,15 @@
       exportBtn.type = 'button';
       exportBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn';
       exportBtn.innerHTML = '<span class="fas fa-file-export me-1"></span>Export Device List';
-      exportBtn.title = "Export upload.ini";
+      exportBtn.title = "Export from draft selection, draft all, or upload.ini";
       exportBtn.onclick = handleExport;
 
       // Save Config
       var saveBtn = document.createElement('button');
       saveBtn.type = 'button';
       saveBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn';
-      saveBtn.innerHTML = '<span class="fas fa-save me-1"></span>Save Device List';
-      saveBtn.title = "Overwrite upload.ini with current selection";
+      saveBtn.innerHTML = '<span class="fas fa-save me-1"></span>Apply Device List';
+      saveBtn.title = "Apply draft host list to upload.ini";
       saveBtn.onclick = handleSaveIni;
 
       // Update
@@ -927,7 +1289,7 @@
 
       // Merge progress into results or handle separately
       const progressMap = data.progress || {};
-      const results = data.results || [];
+      let results = data.results || [];
 
       // Update results with progress info if running
       results.forEach(r => {
@@ -953,9 +1315,11 @@
         }
       });
 
+      results = ensureResultsContainHosts(results, Array.from(selectedKeys));
       lastResults = results; // Cache for re-rednering if firmware list updates
       render(results);
       updateSpinner(data.running);
+      updateDraftBanner();
       return data.running;
     }
 
@@ -1276,24 +1640,14 @@
       if (!this.files || !this.files[0]) return;
       const file = this.files[0];
       try {
-        const res = await fetch('/api/import_ini', {
-          method: 'POST',
-          headers: {
-            'X-Filename': file.name,
-            'Content-Type': 'application/octet-stream'
-          },
-          body: file
-        });
-        if (res.ok) {
-          alert('Import successful via merge.');
-          // Refresh devices
-          runRefresh(); // Or fetchDevices() but runRefresh will do a status check too?
-          // Just refreshing list is safer first
-          await fetchDevices();
+        const content = await file.text();
+        const importedHosts = parseHostsFromIniText(content);
+        if (importedHosts.length === 0) {
+          alert('No valid [hosts] entries found in imported file.');
         } else {
-          alert('Import failed');
+          showImportPreview(importedHosts, file.name);
         }
-      } catch (e) { console.error(e); alert('Import failed'); }
+      } catch (e) { console.error(e); alert('Import preview failed'); }
       this.value = '';
     });
 
@@ -1351,48 +1705,17 @@
       document.getElementById('iniImportInput').click();
     }
 
-    async function handleExport() {
-      const hosts = Array.from(selectedKeys);
-      let exportAll = false;
-
-      if (hosts.length === 0) {
-        if (!confirm("No devices selected. Export ALL devices (Create new INI)?")) {
-          return;
-        }
-        exportAll = true;
-      }
-
-      try {
-        const res = await fetch('/api/export_ini', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ hosts: hosts, export_all: exportAll })
-        });
-        if (res.ok) {
-          const blob = await res.blob();
-          const url = window.URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = "upload.ini";
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-        } else {
-          alert("Export failed");
-        }
-      } catch (e) {
-        console.error(e);
-        alert("Export error");
-      }
+    function handleExport() {
+      showExportOptions();
     }
 
 
     async function handleSaveIni() {
       const hosts = Array.from(selectedKeys);
 
-      let msg = "Overwrite device list in upload.ini with currently selected devices?";
+      let msg = "Apply current draft host list to upload.ini?";
       if (hosts.length === 0) {
-        msg = "No devices selected. This will EMPTY the device list in upload.ini. Are you sure?";
+        msg = "Draft host list is empty. This will clear [hosts] in upload.ini. Continue?";
       }
 
       if (!confirm(msg)) return;
@@ -1404,13 +1727,15 @@
           body: JSON.stringify({ hosts: hosts })
         });
         if (res.ok) {
-          alert("Configuration saved (upload.ini updated).");
+          persistedHosts = new Set(hosts);
+          updateDraftBanner();
+          alert("Draft applied (upload.ini updated).");
         } else {
-          alert("Failed to save configuration.");
+          alert("Failed to apply draft to upload.ini.");
         }
       } catch (e) {
         console.error(e);
-        alert("Error saving configuration.");
+        alert("Error applying draft to upload.ini.");
       }
     }
 
@@ -1422,7 +1747,7 @@
         return;
       }
 
-      if (!confirm(`Remove ${hosts.length} device(s) from the list? (Changes are only saved to INI if you click 'Save Config')`)) return;
+      if (!confirm(`Remove ${hosts.length} device(s) from draft selection? (Changes are written only after 'Apply Device List')`)) return;
 
       // Remove from table
       table.rows(function (idx, data, node) {
@@ -1436,12 +1761,24 @@
 
       selectedKeys.clear();
       $('#selectAllHead').prop('checked', false);
+      updateDraftBanner();
     }
+    window.addEventListener('beforeunload', function (e) {
+      const dirty = Array.from(selectedKeys).some(h => !persistedHosts.has(h)) ||
+        Array.from(persistedHosts).some(h => !selectedKeys.has(h));
+      if (!dirty) return;
+      e.preventDefault();
+      e.returnValue = '';
+    });
+
     // Auto-load upload.ini at startup:
-    // We call runRefresh but without specific IPs, it normally does GBL.
-    // We now pass enableGbl=false to ONLY load from INI and check status, skipping UDP broadcast.
-    runRefresh(false);
-    fetchFirmwareList();
+    // 1) read persisted hosts from upload.ini for draft baseline
+    // 2) run refresh without UDP broadcast to query hosts from INI
+    (async function initPage() {
+      await loadPersistedHostsFromDisk();
+      await runRefresh(false);
+      fetchFirmwareList();
+    })();
 
     // Vertical menu collapse/open with animation + persistence
     (function () {
