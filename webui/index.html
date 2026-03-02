@@ -134,7 +134,7 @@
           <div class="modal-body">
             <form id="addDeviceForm">
               <div class="alert alert-info py-2" role="alert">
-                New entries are added to draft only. They are written to <code>upload.ini</code> after you apply changes.
+                New entries are added to the current device list only. They are written to <code>upload.ini</code> after you apply changes.
               </div>
               <div class="mb-3">
                 <label for="newDevIp" class="form-label">IP Address / Hostname</label>
@@ -166,7 +166,7 @@
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-            <button type="button" class="btn btn-primary" onclick="submitNewDevice()">Add to Draft</button>
+            <button type="button" class="btn btn-primary" onclick="submitNewDevice()">Add to Current device list</button>
           </div>
         </div>
       </div>
@@ -213,7 +213,7 @@
       <div class="modal-dialog modal-lg">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title" id="importPreviewModalLabel">Import Device List (Draft)</h5>
+            <h5 class="modal-title" id="importPreviewModalLabel">Import Device List (Current device list)</h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
           <div class="modal-body">
@@ -221,17 +221,17 @@
             <div class="form-check mb-2">
               <input class="form-check-input" type="radio" name="importMode" id="importModeMerge" value="merge"
                 checked>
-              <label class="form-check-label" for="importModeMerge">Merge into current draft selection</label>
+              <label class="form-check-label" for="importModeMerge">Merge into current device list selection</label>
             </div>
             <div class="form-check mb-3">
               <input class="form-check-input" type="radio" name="importMode" id="importModeReplace" value="replace">
-              <label class="form-check-label" for="importModeReplace">Replace current draft selection</label>
+              <label class="form-check-label" for="importModeReplace">Replace current device list selection</label>
             </div>
             <div class="border rounded bg-body-tertiary p-2 host-preview-list" id="importPreviewHosts"></div>
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-            <button type="button" class="btn btn-primary" onclick="applyImportToDraft()">Apply to Draft</button>
+            <button type="button" class="btn btn-primary" onclick="applyImportToDraft()">Apply to Current device list</button>
           </div>
         </div>
       </div>
@@ -247,26 +247,25 @@
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
           <div class="modal-body">
-            <p class="mb-2" id="exportOptionsSummary">Choose what to export.</p>
             <div class="form-check mb-2">
               <input class="form-check-input" type="radio" name="exportMode" id="exportModeDraftSelection"
                 value="draft_selection" checked>
               <label class="form-check-label" for="exportModeDraftSelection" id="exportModeDraftSelectionLabel">
-                Draft (Selection)
+                Current device list (Selection)
               </label>
             </div>
             <div class="form-check mb-2">
               <input class="form-check-input" type="radio" name="exportMode" id="exportModeDraftAll"
                 value="draft_all">
               <label class="form-check-label" for="exportModeDraftAll" id="exportModeDraftAllLabel">
-                Draft (All)
+                Current device list (All)
               </label>
             </div>
             <div class="form-check">
               <input class="form-check-input" type="radio" name="exportMode" id="exportModeUploadIni"
                 value="upload_ini">
-              <label class="form-check-label" for="exportModeUploadIni">
-                upload.ini (On Disk)
+              <label class="form-check-label" for="exportModeUploadIni" id="exportModeUploadIniLabel">
+                Stored device list (upload.ini)
               </label>
             </div>
           </div>
@@ -478,7 +477,7 @@
               <div id="draftBannerText" class="mb-0">Unsaved changes</div>
               <div class="btn-group btn-group-sm">
                 <button type="button" class="btn btn-warning" onclick="handleSaveIni()">Apply Device List</button>
-                <button type="button" class="btn btn-outline-secondary" onclick="discardDraftHosts()">Discard Draft</button>
+                <button type="button" class="btn btn-outline-secondary" onclick="discardDraftHosts()">Discard Current device list</button>
               </div>
             </div>
             <details id="draftChangesDetails" class="mt-2">
@@ -634,7 +633,7 @@
       const isGblSearch = String(host).toLowerCase() === 'search';
       return {
         ip: host,
-        product_name: isGblSearch ? 'GBL Search Entry' : 'Draft Device',
+        product_name: isGblSearch ? 'GBL Search Entry' : 'Current Device List Entry',
         hostname: '',
         mac: '',
         initial_firmware: '',
@@ -643,7 +642,7 @@
         selected_prodid: '',
         status_only: true,
         final_firmware: '',
-        firmware_status: 'draft entry (not queried)',
+        firmware_status: 'current device list entry (not queried)',
         firmware_upload_notes: '',
         success: true,
         error_message: '',
@@ -747,7 +746,7 @@
       if (summary) {
         summary.textContent =
           `File: ${filename} | Imported hosts: ${pendingImportHosts.length} | ` +
-          `Draft now: ${draftCount} | Draft after merge: ${mergeSet.size}`;
+          `Current device list now: ${draftCount} | Current device list after merge: ${mergeSet.size}`;
       }
       if (hostBox) {
         hostBox.textContent = pendingImportHosts.join('\n');
@@ -762,15 +761,13 @@
       const selectedCount = selectedKeys.size;
       const allDraftHosts = getAllDraftHosts();
       const allDraftCount = allDraftHosts.length;
-      const summary = document.getElementById('exportOptionsSummary');
       const draftSelLabel = document.getElementById('exportModeDraftSelectionLabel');
       const draftAllLabel = document.getElementById('exportModeDraftAllLabel');
+      const uploadIniLabel = document.getElementById('exportModeUploadIniLabel');
       const selRadio = document.getElementById('exportModeDraftSelection');
-      if (summary) {
-        summary.textContent = `Draft selection: ${selectedCount} host(s), Draft all: ${allDraftCount} host(s).`;
-      }
-      if (draftSelLabel) draftSelLabel.textContent = `Draft (Selection: ${selectedCount})`;
-      if (draftAllLabel) draftAllLabel.textContent = `Draft (All: ${allDraftCount})`;
+      if (draftSelLabel) draftSelLabel.textContent = `Current device list (Selection: ${selectedCount} host(s))`;
+      if (draftAllLabel) draftAllLabel.textContent = `Current device list (All: ${allDraftCount} host(s))`;
+      if (uploadIniLabel) uploadIniLabel.textContent = `Stored device list (upload.ini: ${persistedHosts.size} host(s))`;
       if (selRadio) selRadio.checked = true;
 
       const modalEl = document.getElementById('exportOptionsModal');
@@ -794,7 +791,7 @@
       } else if (mode === 'draft_all') {
         hosts = getAllDraftHosts();
         if (hosts.length === 0) {
-          alert('No draft hosts to export.');
+          alert('No hosts in current device list to export.');
           return;
         }
       } else {
@@ -850,7 +847,7 @@
     }
 
     function discardDraftHosts() {
-      if (!confirm('Discard unsaved draft host-list changes and revert to upload.ini?')) return;
+      if (!confirm('Discard unsaved current device list changes and revert to upload.ini?')) return;
       selectedKeys.clear();
       persistedHosts.forEach(h => selectedKeys.add(h));
       pruneDraftHostSettings(Array.from(persistedHosts));
@@ -1258,7 +1255,7 @@
       addBtn.type = 'button';
       addBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn';
       addBtn.innerHTML = '<span class="fas fa-plus me-1"></span>Add Device';
-      addBtn.title = "Add single device to draft";
+      addBtn.title = "Add single device to current device list";
       addBtn.onclick = handleAddDevice;
 
       // Import INI
@@ -1266,7 +1263,7 @@
       importBtn.type = 'button';
       importBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn';
       importBtn.innerHTML = '<span class="fas fa-file-import me-1"></span>Import Device List';
-      importBtn.title = "Import into draft selection (preview first)";
+      importBtn.title = "Import into current device list selection (preview first)";
       importBtn.onclick = handleImport;
 
       // Export INI
@@ -1274,7 +1271,7 @@
       exportBtn.type = 'button';
       exportBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn';
       exportBtn.innerHTML = '<span class="fas fa-file-export me-1"></span>Export Device List';
-      exportBtn.title = "Export from draft selection, draft all, or upload.ini";
+      exportBtn.title = "Export from current device list selection, current device list (all), or stored device list (upload.ini)";
       exportBtn.onclick = handleExport;
 
       // Update
@@ -1713,7 +1710,7 @@
       if (modal) modal.hide();
 
       if (alreadySelected) {
-        alert("Device already existed in draft. Stored dialog settings were updated.");
+        alert("Device already existed in the current device list. Stored dialog settings were updated.");
       }
     }
 
@@ -1733,9 +1730,9 @@
         if (draftHostSettings[h]) hostSettings[h] = draftHostSettings[h];
       });
 
-      let msg = "Apply current draft host list to upload.ini?";
+      let msg = "Apply current device list to upload.ini?";
       if (hosts.length === 0) {
-        msg = "Draft host list is empty. This will clear [hosts] in upload.ini. Continue?";
+        msg = "Current device list is empty. This will clear [hosts] in upload.ini. Continue?";
       }
 
       if (!confirm(msg)) return false;
@@ -1750,15 +1747,15 @@
           persistedHosts = new Set(hosts);
           pruneDraftHostSettings(hosts);
           updateDraftBanner();
-          alert("Draft applied (upload.ini updated).");
+          alert("Current device list applied (upload.ini updated).");
           return true;
         } else {
-          alert("Failed to apply draft to upload.ini.");
+          alert("Failed to apply current device list to upload.ini.");
           return false;
         }
       } catch (e) {
         console.error(e);
-        alert("Error applying draft to upload.ini.");
+        alert("Error applying current device list to upload.ini.");
         return false;
       }
     }
