@@ -426,9 +426,10 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(raw.decode('utf-8'))
             
             hosts = body.get('hosts', [])
+            host_settings = body.get('host_settings', {})
             # 'hosts' should be a list of strings
             
-            overwrite_ini_hosts(hosts)
+            overwrite_ini_hosts(hosts, host_settings=host_settings)
             
             self._send(200, {"Content-Type": "application/json"})
             self.wfile.write(json.dumps({"success": True}).encode('utf-8'))

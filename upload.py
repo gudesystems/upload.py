@@ -499,12 +499,17 @@ def generate_ini_export(selected_keys: List[str] = None, export_all: bool = Fals
     return output.getvalue()
 
 
-def overwrite_ini_hosts(hosts_list: List[str], filename: str = 'upload.ini') -> None:
+def overwrite_ini_hosts(
+        hosts_list: List[str],
+        host_settings: Optional[Dict[str, Dict[str, Any]]] = None,
+        filename: str = 'upload.ini') -> None:
     """
     Overwrite the [hosts] section of the INI file with the provided list of hosts.
     Preserves other sections like [defaults], [httpDefaults], and specific device sections if they exist.
+    Optionally updates per-host section settings for hosts present in the provided list.
     
     :param hosts_list: List of IP strings (or IP:Port) to set as the new hosts list.
+    :param host_settings: Optional map of host -> settings dict to write into host sections.
     :param filename: The INI file to update.
     """
     config = ConfigParser(strict=False)
@@ -526,6 +531,20 @@ def overwrite_ini_hosts(hosts_list: List[str], filename: str = 'upload.ini') -> 
     for h in hosts_list:
         config.set('hosts', f'ip{idx}', h)
         idx += 1
+
+    # Optionally write per-host section settings for hosts in the active list.
+    if host_settings is None or not isinstance(host_settings, dict):
+        host_settings = {}
+    active_hosts = set(hosts_list)
+    for host, settings in host_settings.items():
+        if host not in active_hosts or not isinstance(settings, dict):
+            continue
+        if host not in config:
+            config[host] = {}
+        for k, v in settings.items():
+            if v is None:
+                continue
+            config[host][str(k)] = str(v)
         
     # Note: We do NOT remove sections for devices that are no longer in the list.
     # The request was to "overwrite the old ini" regarding the SELECTION (device list).

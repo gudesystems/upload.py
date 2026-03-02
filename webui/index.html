@@ -133,6 +133,9 @@
           </div>
           <div class="modal-body">
             <form id="addDeviceForm">
+              <div class="alert alert-info py-2" role="alert">
+                New entries are added to draft only. They are written to <code>upload.ini</code> after you apply changes.
+              </div>
               <div class="mb-3">
                 <label for="newDevIp" class="form-label">IP Address / Hostname</label>
                 <input type="text" class="form-control" id="newDevIp" required placeholder="192.168.x.x or hostname">
@@ -163,7 +166,7 @@
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-            <button type="button" class="btn btn-primary" onclick="submitNewDevice()">Add Device</button>
+            <button type="button" class="btn btn-primary" onclick="submitNewDevice()">Add to Draft</button>
           </div>
         </div>
       </div>
@@ -478,6 +481,10 @@
                 <button type="button" class="btn btn-outline-secondary" onclick="discardDraftHosts()">Discard Draft</button>
               </div>
             </div>
+            <details id="draftChangesDetails" class="mt-2">
+              <summary id="draftChangesSummary">Show changes</summary>
+              <div class="border rounded bg-body-tertiary p-2 host-preview-list mt-2" id="draftChangesPreview"></div>
+            </details>
           </div>
           <div class="bg-body-tertiary p-3 rounded-bottom-2">
             <div class="table-responsive">
@@ -548,6 +555,7 @@
     let table;
     const selectedKeys = new Set();
     let persistedHosts = new Set();
+    const draftHostSettings = {}; // host -> settings entered in Add Device dialog (draft only)
     let pendingImportHosts = [];
     let lastResults = [];
 
@@ -658,23 +666,51 @@
       return out;
     }
 
-    function updateDraftBanner() {
-      const banner = document.getElementById('draftBanner');
-      const text = document.getElementById('draftBannerText');
-      if (!banner || !text) return;
-
+    function getDraftHostChanges() {
       const draft = new Set(Array.from(selectedKeys));
       const added = Array.from(draft).filter(h => !persistedHosts.has(h));
       const removed = Array.from(persistedHosts).filter(h => !draft.has(h));
+      return { added, removed };
+    }
+
+    function pruneDraftHostSettings(validHosts) {
+      const valid = new Set(validHosts || []);
+      Object.keys(draftHostSettings).forEach(k => {
+        if (!valid.has(k)) delete draftHostSettings[k];
+      });
+    }
+
+    function buildDraftChangeLines(added, removed) {
+      const lines = [];
+      added.slice().sort().forEach(h => lines.push(`+ ${h}`));
+      removed.slice().sort().forEach(h => lines.push(`- ${h}`));
+      return lines;
+    }
+
+    function updateDraftBanner() {
+      const banner = document.getElementById('draftBanner');
+      const text = document.getElementById('draftBannerText');
+      const details = document.getElementById('draftChangesDetails');
+      const detailsSummary = document.getElementById('draftChangesSummary');
+      const detailsPreview = document.getElementById('draftChangesPreview');
+      if (!banner || !text || !details || !detailsSummary || !detailsPreview) return;
+
+      const { added, removed } = getDraftHostChanges();
       const dirty = added.length > 0 || removed.length > 0;
 
       if (!dirty) {
         banner.classList.remove('show');
         text.textContent = '';
+        detailsSummary.textContent = 'Show changes';
+        detailsPreview.textContent = '';
+        details.open = false;
         return;
       }
 
+      const lines = buildDraftChangeLines(added, removed);
       text.textContent = `Unsaved host-list changes: +${added.length} added, -${removed.length} removed.`;
+      detailsSummary.textContent = `Show changes (${lines.length})`;
+      detailsPreview.textContent = lines.join('\n');
       banner.classList.add('show');
     }
 
@@ -692,6 +728,7 @@
         persistedHosts = new Set(hosts);
         selectedKeys.clear();
         hosts.forEach(h => selectedKeys.add(h));
+        pruneDraftHostSettings(hosts);
         updateDraftBanner();
       } catch (e) {
         console.error('Failed to load host list from upload.ini', e);
@@ -809,7 +846,6 @@
       const modal = bootstrap.Modal.getInstance(modalEl);
       if (modal) modal.hide();
 
-      alert(`Imported ${pendingImportHosts.length} host entries into draft. Click 'Apply Device List' to persist to upload.ini.`);
       pendingImportHosts = [];
     }
 
@@ -817,6 +853,7 @@
       if (!confirm('Discard unsaved draft host-list changes and revert to upload.ini?')) return;
       selectedKeys.clear();
       persistedHosts.forEach(h => selectedKeys.add(h));
+      pruneDraftHostSettings(Array.from(persistedHosts));
       lastResults = ensureResultsContainHosts(lastResults, Array.from(selectedKeys));
       render(lastResults);
       updateDraftBanner();
@@ -1221,16 +1258,8 @@
       addBtn.type = 'button';
       addBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn';
       addBtn.innerHTML = '<span class="fas fa-plus me-1"></span>Add Device';
-      addBtn.title = "Add Single Device";
+      addBtn.title = "Add single device to draft";
       addBtn.onclick = handleAddDevice;
-
-      // Delete Device
-      var delBtn = document.createElement('button');
-      delBtn.type = 'button';
-      delBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn'; //btn-outline-danger
-      delBtn.innerHTML = '<span class="fas fa-trash me-1"></span>Delete Device';
-      delBtn.title = "Delete selected from view";
-      delBtn.onclick = handleDelete;
 
       // Import INI
       var importBtn = document.createElement('button');
@@ -1248,14 +1277,6 @@
       exportBtn.title = "Export from draft selection, draft all, or upload.ini";
       exportBtn.onclick = handleExport;
 
-      // Save Config
-      var saveBtn = document.createElement('button');
-      saveBtn.type = 'button';
-      saveBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn';
-      saveBtn.innerHTML = '<span class="fas fa-save me-1"></span>Apply Device List';
-      saveBtn.title = "Apply draft host list to upload.ini";
-      saveBtn.onclick = handleSaveIni;
-
       // Update
       var updBtn = document.createElement('button');
       updBtn.id = 'updateBtn';
@@ -1268,10 +1289,8 @@
       btnGroup.appendChild(searchBtn);
       //btnGroup.appendChild(runBtn);
       btnGroup.appendChild(addBtn);
-      btnGroup.appendChild(delBtn);
       btnGroup.appendChild(importBtn);
       btnGroup.appendChild(exportBtn);
-      btnGroup.appendChild(saveBtn);
       btnGroup.appendChild(updBtn);
 
       container.appendChild(btnGroup);
@@ -1666,38 +1685,35 @@
       document.getElementById('authFields').style.display = this.checked ? 'block' : 'none';
     });
 
-    async function submitNewDevice() {
-      const ip = document.getElementById('newDevIp').value;
-      if (!ip) { alert("IP is required"); return; }
+    function submitNewDevice() {
+      const ipRaw = normalizeHostKey(document.getElementById('newDevIp').value);
+      if (!ipRaw) { alert("IP is required"); return; }
 
-      const payload = {
-        ip: ip,
-        port: document.getElementById('newDevPort').value,
-        ssl: document.getElementById('newDevSsl').checked ? '1' : '0',
-        auth: document.getElementById('newDevAuth').checked ? '1' : '0',
-        username: document.getElementById('newDevUser').value,
-        password: document.getElementById('newDevPass').value
+      const portRaw = normalizeHostKey(document.getElementById('newDevPort').value);
+      let hostKey = ipRaw;
+      if (portRaw && !ipRaw.includes(':')) hostKey = `${ipRaw}:${portRaw}`;
+
+      const settings = {
+        'ssl': document.getElementById('newDevSsl').checked ? '1' : '0',
+        'auth': document.getElementById('newDevAuth').checked ? '1' : '0',
+        'username': document.getElementById('newDevUser').value || '',
+        'password': document.getElementById('newDevPass').value || ''
       };
+      if (portRaw) settings['port'] = portRaw;
+      draftHostSettings[hostKey] = settings;
 
-      try {
-        const res = await fetch('/api/add_device', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        if (res.ok) {
-          // Close modal
-          const modalEl = document.getElementById('addDeviceModal');
-          const modal = bootstrap.Modal.getInstance(modalEl);
-          modal.hide();
-          // Refresh list via full scan to pick up new device
-          runRefresh();
-        } else {
-          alert("Failed to add device");
-        }
-      } catch (e) {
-        console.error(e);
-        alert("Error adding device");
+      const alreadySelected = selectedKeys.has(hostKey);
+      selectedKeys.add(hostKey);
+      lastResults = ensureResultsContainHosts(lastResults, Array.from(selectedKeys));
+      render(lastResults);
+      updateDraftBanner();
+
+      const modalEl = document.getElementById('addDeviceModal');
+      const modal = bootstrap.Modal.getInstance(modalEl);
+      if (modal) modal.hide();
+
+      if (alreadySelected) {
+        alert("Device already existed in draft. Stored dialog settings were updated.");
       }
     }
 
@@ -1712,57 +1728,41 @@
 
     async function handleSaveIni() {
       const hosts = Array.from(selectedKeys);
+      const hostSettings = {};
+      hosts.forEach(h => {
+        if (draftHostSettings[h]) hostSettings[h] = draftHostSettings[h];
+      });
 
       let msg = "Apply current draft host list to upload.ini?";
       if (hosts.length === 0) {
         msg = "Draft host list is empty. This will clear [hosts] in upload.ini. Continue?";
       }
 
-      if (!confirm(msg)) return;
+      if (!confirm(msg)) return false;
 
       try {
         const res = await fetch('/api/save_ini_selection', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ hosts: hosts })
+          body: JSON.stringify({ hosts: hosts, host_settings: hostSettings })
         });
         if (res.ok) {
           persistedHosts = new Set(hosts);
+          pruneDraftHostSettings(hosts);
           updateDraftBanner();
           alert("Draft applied (upload.ini updated).");
+          return true;
         } else {
           alert("Failed to apply draft to upload.ini.");
+          return false;
         }
       } catch (e) {
         console.error(e);
         alert("Error applying draft to upload.ini.");
-      }
-    }
-
-
-    async function handleDelete() {
-      const hosts = Array.from(selectedKeys);
-      if (hosts.length === 0) {
-        alert("No devices selected to delete.");
-        return;
-      }
-
-      if (!confirm(`Remove ${hosts.length} device(s) from draft selection? (Changes are written only after 'Apply Device List')`)) return;
-
-      // Remove from table
-      table.rows(function (idx, data, node) {
-        // data is array: [checkbox, status, ip, ...]
-        // Checkbox HTML: data-key="IP"
-        const html = data[0];
-        const m = html.match(/data-key="([^"]+)"/);
-        if (m && selectedKeys.has(m[1])) return true;
         return false;
-      }).remove().draw();
-
-      selectedKeys.clear();
-      $('#selectAllHead').prop('checked', false);
-      updateDraftBanner();
+      }
     }
+
     window.addEventListener('beforeunload', function (e) {
       const dirty = Array.from(selectedKeys).some(h => !persistedHosts.has(h)) ||
         Array.from(persistedHosts).some(h => !selectedKeys.has(h));
