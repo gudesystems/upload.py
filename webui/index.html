@@ -118,6 +118,13 @@
       font-size: .8rem;
       white-space: pre;
     }
+
+    .nav-link-disabled {
+      pointer-events: none;
+      cursor: default;
+      opacity: .45;
+    }
+
   </style>
 </head>
 
@@ -420,7 +427,7 @@
                 </div>
               </div>
             </li>
-            <li class="nav-item dropdown"><a class="nav-link notification-indicator notification-indicator-primary px-0"
+            <li class="nav-item dropdown"><a class="nav-link px-0"
                 id="navbarDropdownNotification" role="button" data-bs-toggle="dropdown" aria-haspopup="true"
                 aria-expanded="false" data-hide-on-body-scroll="data-hide-on-body-scroll"><svg
                   class="fas svg-h-7 mt2 me-1" aria-hidden="true" focusable="false" role="img"
@@ -438,39 +445,28 @@
                       <div class="col-auto">
                         <h6 class="card-header-title mb-0">Notifications / Alerts</h6>
                       </div>
-                      <div class="col-auto ps-0 ps-sm-3"><a class="card-link fw-normal" href="#">Mark all as read</a>
+                      <div class="col-auto ps-0 ps-sm-3"><a class="card-link fw-normal" href="#"
+                          id="markNotificationsRead">Mark all as read</a>
                       </div>
                     </div>
                   </div>
                   <div class="scrollbar-overlay" style="max-height:19rem" data-simplebar>
-                    <div class="list-group list-group-flush fw-normal fs-10">
-                      <div class="list-group-title border-bottom">NEW</div>
-                      <div class="list-group-item"><a class="notification notification-flush notification-unread"
-                          href="#">
-                          <div class="notification-body">
-                            <p class="mb-1"><strong>Welcome</strong><br>No new notifications</p>
-                          </div>
-                        </a></div>
+                    <div class="list-group list-group-flush fw-normal fs-10" id="notificationList">
+                      <div class="list-group-item text-600" id="notificationEmptyItem">No notifications yet</div>
                     </div>
                   </div>
                 </div>
               </div>
             </li>
-            <li class="nav-item dropdown"><a class="nav-link pe-0" id="navbarDropdownUser" href="#" role="button"
-                data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false"><svg class="fas svg-h-7"
+            <li class="nav-item"><a class="nav-link pe-0 nav-link-disabled disabled" id="navbarDropdownUser" href="#"
+                role="button" aria-disabled="true" tabindex="-1" onclick="return false;"
+                title="User profile (coming soon)"><svg class="fas svg-h-7"
                   aria-hidden="true" focusable="false" role="img" xmlns="http://www.w3.org/2000/svg"
                   viewBox="0 0 448 512">
                   <path fill="currentColor"
                     d="M224 256c70.7 0 128-57.3 128-128S294.7 0 224 0 96 57.3 96 128s57.3 128 128 128zm89.6 32h-11.8c-22 10.4-46.6 16-77.8 16-31.2 0-55.8-5.6-77.8-16h-11.8C57.3 288 0 345.3 0 416v32c0 35.3 28.7 64 64 64h320c35.3 0 64-28.7 64-64v-32c0-70.7-57.3-128-134.4-128z">
                   </path>
                 </svg></a>
-              <div class="dropdown-menu dropdown-caret dropdown-menu-end dropdown-caret-bg"
-                aria-labelledby="navbarDropdownUser">
-                <div class="bg-white dark__bg-1000 rounded-2 py-2"><a class="dropdown-item" href="#">Profile</a><a
-                    class="dropdown-item" href="#">Settings</a>
-                  <div class="dropdown-divider"></div><a class="dropdown-item" href="#">Logout</a>
-                </div>
-              </div>
             </li>
           </ul>
         </nav>
@@ -574,6 +570,10 @@
     let availableSslFiles = [];
 
     const modelMap = {}; // Map key -> product/model string for grouping
+    const notificationItems = [];
+    const lastNoteByDevice = {};
+    let notificationUnreadCount = 0;
+    const notificationMaxItems = 200;
 
     function normalizeHostKey(v) {
       return String(v || '').trim();
@@ -589,6 +589,114 @@
         out.push(key);
       });
       return out;
+    }
+
+    function escapeHtml(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function formatNotificationTimestamp(value) {
+      const dt = (value instanceof Date) ? value : new Date(value);
+      return dt.toLocaleString();
+    }
+
+    function notificationDeviceLabel(r) {
+      const host = rowKey(r) || r.conn_host || r.ip || '-';
+      const displayName = normalizeHostKey(r.product_name || r.hostname || '');
+      return displayName ? `${host} (${displayName})` : host;
+    }
+
+    function renderNotifications() {
+      const list = document.getElementById('notificationList');
+      if (!list) return;
+
+      if (notificationItems.length === 0) {
+        list.innerHTML = '<div class="list-group-item text-600" id="notificationEmptyItem">No notifications yet</div>';
+      } else {
+        list.innerHTML = notificationItems.map(item => {
+          const unreadClass = item.unread ? 'notification-unread' : '';
+          return `
+            <div class="list-group-item">
+              <div class="notification notification-flush ${unreadClass}">
+                <div class="notification-body">
+                  <p class="mb-1"><strong>${escapeHtml(item.device)}</strong><br>${escapeHtml(item.note)}</p>
+                  <div class="fs-11 text-600">${escapeHtml(item.time)}</div>
+                </div>
+              </div>
+            </div>`;
+        }).join('');
+      }
+      updateNotificationIndicator();
+    }
+
+    function updateNotificationIndicator() {
+      const bell = document.getElementById('navbarDropdownNotification');
+      if (!bell) return;
+
+      const hasUnread = notificationUnreadCount > 0;
+      bell.classList.toggle('notification-indicator', hasUnread);
+      bell.classList.toggle('notification-indicator-primary', hasUnread);
+      bell.classList.toggle('notification-indicator-fill', hasUnread);
+    }
+
+    function isCompletedNotificationNote(noteText) {
+      const note = String(noteText || '').trim();
+      if (!note) return false;
+
+      const lower = note.toLowerCase();
+      if (lower === 'status only, no changes made') return false;
+      if (lower === 'uploading') return false;
+      if (lower === 'checking' || lower === 'checking...') return false;
+      if (lower.startsWith('uploading')) return false;
+      if (lower.startsWith('rebooting')) return false;
+      if (lower.startsWith('checking')) return false;
+      if (/%/.test(note) && /upload/i.test(note)) return false;
+
+      return true;
+    }
+
+    function addNotificationEntry(device, noteText) {
+      const note = String(noteText || '').trim();
+      if (!note) return;
+
+      notificationItems.unshift({
+        device: String(device || '-'),
+        note,
+        time: formatNotificationTimestamp(new Date()),
+        unread: true
+      });
+      if (notificationItems.length > notificationMaxItems) {
+        notificationItems.length = notificationMaxItems;
+      }
+      notificationUnreadCount += 1;
+      renderNotifications();
+    }
+
+    function markAllNotificationsRead(evt) {
+      if (evt) evt.preventDefault();
+      notificationUnreadCount = 0;
+      notificationItems.forEach(item => { item.unread = false; });
+      renderNotifications();
+    }
+
+    function captureNotifications(results) {
+      (results || []).forEach(r => {
+        const key = rowKey(r);
+        if (!key) return;
+
+        const noteText = String(r.firmware_status || r.firmware_upload_notes || '').trim();
+        if (!noteText) return;
+        if (!isCompletedNotificationNote(noteText)) return;
+        if (lastNoteByDevice[key] === noteText) return;
+
+        lastNoteByDevice[key] = noteText;
+        addNotificationEntry(notificationDeviceLabel(r), noteText);
+      });
     }
 
     function getAllDraftHosts() {
@@ -1337,6 +1445,7 @@
         }
       });
 
+      captureNotifications(results);
       results = ensureResultsContainHosts(results, Array.from(selectedKeys));
       lastResults = results; // Cache for re-rednering if firmware list updates
       render(results);
@@ -1781,6 +1890,12 @@
       e.preventDefault();
       e.returnValue = '';
     });
+
+    const markNotificationsReadLink = document.getElementById('markNotificationsRead');
+    if (markNotificationsReadLink) {
+      markNotificationsReadLink.addEventListener('click', markAllNotificationsRead);
+    }
+    renderNotifications();
 
     // Auto-load upload.ini at startup:
     // 1) read persisted hosts from upload.ini for draft baseline
