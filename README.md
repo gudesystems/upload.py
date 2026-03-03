@@ -17,6 +17,80 @@ Device configuration and ssl certificates, can be prepared beforehand.
 
 There are two options to set individual commands either via **Command Line Parameters** or via `upload.ini`-config file.
 
+## Web UI (GUI)
+
+Running `upload.py` without CLI arguments starts the local Web UI (`http://127.0.0.1:8000`) and opens it in your browser:
+
+```shell
+python .\upload.py
+```
+
+### Quick Start (GUI)
+
+1. Click **Find Devices** to discover devices (GBL/UDP).
+2. Adjust row settings for **FW / Cfg / SSL** as needed.
+3. Click **Update** and review actions in the confirmation dialog.
+4. Confirm update execution.
+
+### Current Device List vs Stored Device List
+
+The GUI now uses a two-stage list workflow:
+
+- **Current device list**: in-memory working list used for selection/editing in the UI.
+- **Stored device list (`upload.ini`)**: persisted host list on disk.
+
+Important behavior:
+
+- Add/import/remove actions change the **current device list** first.
+- Unsaved list changes are shown in a banner.
+- **Apply Device List** writes current list changes to `upload.ini`.
+- **Discard Current device list** restores hosts from `upload.ini`.
+
+### Import/Export Device List (GUI)
+
+Import flow:
+
+- `Import Device List` shows a preview modal.
+- You can choose:
+  - **Merge into current device list selection**
+  - **Replace current device list selection**
+
+Export flow:
+
+- `Export Device List` offers:
+  - **Current device list (Selection: N host(s))**
+  - **Current device list (All: N host(s))**
+  - **Stored device list (upload.ini: N host(s))**
+
+### Firmware/Config/SSL Update Behavior (GUI)
+
+- **Force firmware update** is optional and controlled by a checkbox in the update confirmation modal.
+  - Default: **unchecked**.
+- **No Update** now truly skips firmware upload for the selected device.
+- Even when firmware is skipped, config and/or SSL updates can still run.
+- Status/notes now include those actions, for example:
+  - `Skipped (No Update); Config updated (config.txt)`
+  - `Skipped (No Update); SSL certificate updated (cert.pem)`
+
+### GUI Startup Notes
+
+If `upload.ini` is missing or contains no hosts and GBL is disabled, the GUI starts with an empty list.  
+Use **Find Devices** in GUI or provide hosts / `gbl=search` in `upload.ini`.
+
+### Screenshots
+
+Firmware selection:
+
+![Firmware selection in Web UI](screenshots/sample_fw-selection.png)
+
+Current device list changes:
+
+![Current device list change banner](screenshots/sample_list_change-deselect_192.168.2.80.png)
+
+Update confirmation dialog:
+
+![Update confirmation with selected actions](screenshots/sample_confirm-update-changes_model.png)
+
 ### Preparation
 
 #### Essential
@@ -80,6 +154,8 @@ There are two options to set individual commands either via **Command Line Param
 | `-r`, `--repl_prod_id` | `{'2110': '2111'}` | replace product IDs to avoid naming conflicts in firmware updates
 | `-d`, `--devices`|               | overwrite upload.ini settings with JSON formatted device configuration
 | `-H`, `--header` |               | set custom HTTP headers as JSON formatted string
+
+Tip: run `python .\upload.py --help` for practical command examples shown directly in the CLI help output.
 
 ## Advanced Usage
 

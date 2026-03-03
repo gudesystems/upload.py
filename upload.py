@@ -845,6 +845,17 @@ def iterate_list(
         result = DeviceResult(ip=ip, product_name="unknown", mac="unknown", initial_firmware="unknown")
         emit({"type": "device_start", "ip": ip})
         
+        def append_status_note(note: str) -> None:
+            """Append an additional action summary to the visible per-device status text."""
+            if not note:
+                return
+            if not result.firmware_status or result.firmware_status == "not attempted":
+                result.firmware_status = note
+                return
+            if note in result.firmware_status:
+                return
+            result.firmware_status = f"{result.firmware_status}; {note}"
+        
         try:
             log.debug(f"Processing device: {ip}")
 
@@ -994,6 +1005,13 @@ def iterate_list(
             else:
                 ssl_cert_filename = DeployDev.get_config_filename('ssl', 'cert', 'pem', mac, ip, _args.configip, explicit_filename=explicit_ssl_file)
 
+            # Check for custom firmware override (currently used for per-device "__no_update__")
+            custom_firmware_map = getattr(_args, 'custom_firmware', None) or {}
+            custom_firmware_val = custom_firmware_map.get(ip)
+            if not custom_firmware_val and dev.host in custom_firmware_map:
+                custom_firmware_val = custom_firmware_map[dev.host]
+            skip_firmware_update = (custom_firmware_val == "__no_update__")
+
             # --- before logging/deploy ---
             actual_prod_id = device_data['prodid']
             # Build replacement map (if provided via args)
@@ -1058,7 +1076,10 @@ def iterate_list(
                 return result
 
             # deploy Firmware
-            if selected_prod_id and selected_prod_id in _firmware: # Check if selected_prod_id is valid for _firmware
+            if skip_firmware_update:
+                log.info(f"[{ip}] Firmware update skipped by user request (No Update).")
+                result.firmware_status = "Skipped (No Update)"
+            elif selected_prod_id and selected_prod_id in _firmware: # Check if selected_prod_id is valid for _firmware
                 # Check for explicit no-update flag
                 target_filename = _firmware.get(selected_prod_id, 'filename', fallback='')
                 if target_filename == '__no_update__':
@@ -1107,6 +1128,7 @@ def iterate_list(
                 try:
                     dev.upload_config(cfg_filename, _args.configip, show_progress_bar=use_progress_bar, progress_cb=emit)
                     log.info(f"[{ip}] Successfully uploaded configuration {cfg_filename}.")
+                    append_status_note(f"Config updated ({cfg_filename})")
                 except Exception as e_cfg:
                     log.error(f"Failed to upload configuration {cfg_filename} to {ip}: {e_cfg}")
                     if result.error_message: result.error_message += f"; Config upload error: {e_cfg}"
@@ -1119,6 +1141,7 @@ def iterate_list(
                 try:
                     dev.upload_ssl_certificate(ssl_cert_filename, show_progress_bar=use_progress_bar, progress_cb=emit)
                     log.info(f"[{ip}] Successfully uploaded SSL certificate {ssl_cert_filename}.")
+                    append_status_note(f"SSL certificate updated ({ssl_cert_filename})")
                 except Exception as e_ssl:
                     log.error(f"Failed to upload SSL certificate {ssl_cert_filename} to {ip}: {e_ssl}")
                     if result.error_message: result.error_message += f"; SSL cert upload error: {e_ssl}"
@@ -1295,6 +1318,7 @@ def run_processing_from_options(
     device_concurrency: int = 1,
     progress_cb: Optional[Callable[[Dict[str, Any]], None]] = None,
     firmware_config: Optional[Dict[str, Dict[str, str]]] = None,
+    custom_firmware: Optional[Dict[str, str]] = None,
     custom_config: Optional[Dict[str, str]] = None,
     custom_ssl: Optional[Dict[str, str]] = None,
 ) -> List[DeviceResult]:
@@ -1321,6 +1345,7 @@ def run_processing_from_options(
     args.nogbl = False
     # Concurrency for programmatic callers
     args.device_concurrency = int(device_concurrency or 1)
+    args.custom_firmware = custom_firmware
     args.custom_config = custom_config
     args.custom_ssl = custom_ssl
 

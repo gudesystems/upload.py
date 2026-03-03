@@ -86,7 +86,14 @@ def _run_gbl_query_async(enable_gbl: bool = True):
 
 
 
-def _run_update_selected_async(hosts: list[str], firmware_overrides: Optional[dict] = None, config_overrides: Optional[dict] = None, ssl_overrides: Optional[dict] = None):
+def _run_update_selected_async(
+    hosts: list[str],
+    firmware_overrides: Optional[dict] = None,
+    config_overrides: Optional[dict] = None,
+    ssl_overrides: Optional[dict] = None,
+    forcefw: bool = False,
+    custom_firmware: Optional[dict] = None,
+):
     try:
         State.running = True
         State.progress = {}
@@ -113,13 +120,14 @@ def _run_update_selected_async(hosts: list[str], firmware_overrides: Optional[di
             version_ini="no_version.ini",
             onlineupdate=True,
             devices=devices,
-            forcefw=True,
+            forcefw=bool(forcefw),
             status=False,
             gbl=False,
             device_concurrency=2,
             progress_cb=on_progress,
 
             firmware_config=firmware_overrides,  # Pass overrides to upload logic
+            custom_firmware=custom_firmware,     # Pass per-device firmware actions
             custom_config=config_overrides,      # Pass config overrides
             custom_ssl=ssl_overrides             # Pass SSL overrides
         )
@@ -609,10 +617,16 @@ class Handler(BaseHTTPRequestHandler):
                 hosts = [str(x) for x in dvc]
         
         firmware_overrides = body.get('firmware_overrides')  # Optional dict
+        custom_firmware = body.get('custom_firmware')        # Optional dict (ip -> "__no_update__")
         config_overrides = body.get('config_overrides')      # Optional dict
         ssl_overrides = body.get('ssl_overrides')            # Optional dict
+        forcefw = bool(body.get('forcefw', False))
 
-        t = threading.Thread(target=_run_update_selected_async, args=(hosts, firmware_overrides, config_overrides, ssl_overrides), daemon=True)
+        t = threading.Thread(
+            target=_run_update_selected_async,
+            args=(hosts, firmware_overrides, config_overrides, ssl_overrides, forcefw, custom_firmware),
+            daemon=True,
+        )
         t.start()
         payload = {'running': True}
         data = json.dumps(payload).encode('utf-8')
