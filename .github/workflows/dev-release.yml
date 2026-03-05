@@ -41,6 +41,16 @@ jobs:
         run: |
           python .github/scripts/bump_dev_version.py --github-output "$env:GITHUB_OUTPUT"
 
+      - name: Capture previous dev tag
+        id: relctx
+        shell: pwsh
+        run: |
+          $prevTag = git tag --list "v*-dev" --sort=-v:refname | Select-Object -First 1
+          if (-not $prevTag) {
+            $prevTag = ""
+          }
+          "previous_tag=$prevTag" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
       - name: Check tag does not already exist
         shell: pwsh
         run: |
@@ -85,6 +95,71 @@ jobs:
           Copy-Item -Path "dist/gude-upload.exe" -Destination $assetName -Force
           "name=$assetName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
+      - name: Generate detailed release notes
+        shell: pwsh
+        run: |
+          $tag = "${{ steps.bump.outputs.tag }}"
+          $uiVersion = "${{ steps.bump.outputs.ui_version }}"
+          $previousTag = "${{ steps.relctx.outputs.previous_tag }}"
+          $runUrl = "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          if ($previousTag) {
+            $range = "$previousTag..HEAD"
+            $rangeLabel = "$previousTag..$tag"
+            $compareUrl = "${{ github.server_url }}/${{ github.repository }}/compare/$previousTag...$tag"
+            $summaryLine = "Changes since $previousTag."
+          } else {
+            $range = "HEAD"
+            $rangeLabel = "HEAD"
+            $compareUrl = ""
+            $summaryLine = "First dev pre-release generated from current dev branch state."
+          }
+
+          $commitCount = [int](git rev-list --count $range)
+          $commitLines = @(git log --no-merges --pretty=format:'- %h %s (%an, %ad)' --date=short $range)
+          if ($commitLines.Count -eq 0) {
+            $commitLines = @("- No non-merge commits in this range.")
+          }
+
+          $changedFiles = @(git diff --name-only $range)
+          if ($changedFiles.Count -eq 0) {
+            $changedFiles = @("None")
+          }
+          $fileLines = @()
+          foreach ($file in $changedFiles) {
+            $fileLines += "- $file"
+          }
+
+          $lines = @(
+            "## Dev Pre-release $tag",
+            "",
+            "- Version: **$uiVersion**",
+            "- Generated: **$(Get-Date -Format \"yyyy-MM-dd HH:mm:ss K\")**",
+            "- Commit range: **$rangeLabel**",
+            "- Workflow run: $runUrl",
+            ""
+          )
+
+          if ($compareUrl) {
+            $lines += "- Compare: $compareUrl"
+            $lines += ""
+          }
+
+          $lines += "### Summary"
+          $lines += "- $summaryLine"
+          $lines += "- Non-merge commits: **$commitCount**"
+          $lines += ""
+          $lines += "### Included Commits"
+          $lines += $commitLines
+          $lines += ""
+          $lines += "### Changed Files"
+          $lines += $fileLines
+          $lines += ""
+          $lines += "### Artifact"
+          $lines += "- ${{ steps.asset.outputs.name }}"
+
+          $lines | Set-Content -Path "release-notes.md" -Encoding utf8
+
       - name: Create GitHub pre-release
         uses: softprops/action-gh-release@v2
         with:
@@ -92,5 +167,6 @@ jobs:
           name: ${{ steps.bump.outputs.tag }}
           target_commitish: dev
           prerelease: true
-          generate_release_notes: true
+          generate_release_notes: false
+          body_path: release-notes.md
           files: ${{ steps.asset.outputs.name }}
