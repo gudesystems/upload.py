@@ -91,6 +91,29 @@ Update confirmation dialog:
 
 ![Update confirmation with selected actions](screenshots/sample_confirm-update-changes_model.png)
 
+## Dev Release Pipeline (GitHub Actions)
+
+The repository includes an automated **dev release** workflow in `.github/workflows/dev-release.yml`.
+
+Trigger:
+
+- Push/merge to branch `dev` (or run manually via **workflow_dispatch**).
+
+What it does:
+
+1. Calculates the next tag from existing `vX.Y.Z-dev` tags (patch bump).
+2. Updates versions automatically:
+   - `pyproject.toml` -> `X.Y.Z.dev0`
+   - `webui/index.html` sidebar -> `X.Y.Z-dev`
+3. Commits the version bump back to `dev`.
+4. Creates and pushes a new tag `vX.Y.Z-dev`.
+5. Builds Windows single-file executable with PyInstaller (`upload.spec`).
+6. Publishes a GitHub **pre-release** with the built `.exe` asset.
+
+Result:
+
+- You can continue your normal flow (merge to `dev`), and the release/tag/versioning is generated automatically.
+
 ### Preparation
 
 #### Essential
