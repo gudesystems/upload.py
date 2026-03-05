@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gude-upload-tool"
-version = "0.0.1"
+version = "0.0.3.dev0"
 description = "A tool to automatically deploy firmware updates, configuration, and SSL certificates to Gude Systems GmbH PDU devices"
 readme = "README.md"
 requires-python = ">=3.7"
