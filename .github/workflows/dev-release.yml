@@ -102,6 +102,7 @@ jobs:
           $uiVersion = "${{ steps.bump.outputs.ui_version }}"
           $previousTag = "${{ steps.relctx.outputs.previous_tag }}"
           $runUrl = "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          $generatedAt = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss zzz")
 
           if ($previousTag) {
             $range = "$previousTag..HEAD"
@@ -134,7 +135,7 @@ jobs:
             "## Dev Pre-release $tag",
             "",
             "- Version: **$uiVersion**",
-            "- Generated: **$(Get-Date -Format \"yyyy-MM-dd HH:mm:ss K\")**",
+            "- Generated: **$generatedAt**",
             "- Commit range: **$rangeLabel**",
             "- Workflow run: $runUrl",
             ""
