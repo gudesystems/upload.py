@@ -46,8 +46,8 @@ jobs:
         run: |
           git fetch --tags --force
           $tag = "${{ steps.bump.outputs.tag }}"
-          git ls-remote --exit-code --tags origin $tag
-          if ($LASTEXITCODE -eq 0) {
+          $existing = git ls-remote --tags origin "refs/tags/$tag"
+          if ($existing) {
             throw "Tag $tag already exists on origin."
           }
           Write-Output "Tag $tag is new."
