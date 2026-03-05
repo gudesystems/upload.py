@@ -147,6 +147,19 @@ gude/version.offline.ini
 .idea/
 pf.py
 pf.bak.py
+.vscode/
+GudeNWTabelle/
+tools/
+26.08.2025_status_oai.txt
+3_icons.html
+gude-upload-0.0.1-dev.txt
+gude-upload-0.0.2-dev.txt
+new_error.txt
+run_upload.bat
+*.ico
+!gude/gude.ico
+gude/gude_only-logo.ico
+gude/gude_only-logo_sw.ico
 
 # unused assets
 GudeNWTabelleOutlets/
