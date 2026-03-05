@@ -62,8 +62,9 @@ jobs:
             throw "No version changes detected in pyproject.toml/webui/index.html."
           }
           git commit -m "chore(release): dev ${{ steps.bump.outputs.ui_version }} [skip ci]"
-          git tag "${{ steps.bump.outputs.tag }}"
-          git push origin HEAD:dev --follow-tags
+          git tag -a "${{ steps.bump.outputs.tag }}" -m "${{ steps.bump.outputs.tag }}"
+          git push origin HEAD:dev
+          git push origin "refs/tags/${{ steps.bump.outputs.tag }}"
 
       - name: Install build dependencies
         shell: pwsh
@@ -89,6 +90,7 @@ jobs:
         with:
           tag_name: ${{ steps.bump.outputs.tag }}
           name: ${{ steps.bump.outputs.tag }}
+          target_commitish: dev
           prerelease: true
           generate_release_notes: true
           files: ${{ steps.asset.outputs.name }}
