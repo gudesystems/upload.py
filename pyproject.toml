@@ -31,6 +31,9 @@ dependencies = [
     "ipaddress;python_version<'3.7'",  # built-in for Python 3.7+
 ]
 
+[tool.poetry]
+package-mode = false
+
 [project.urls]
 "Homepage" = "https://www.gude-systems.com"
 "Bug Tracker" = "https://github.com/gudesystems/upload.py/issues"
