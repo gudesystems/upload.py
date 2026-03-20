@@ -1,0 +1,21 @@
+* text=auto
+
+# Enforce LF for source and config-like text files
+*.py text eol=lf
+*.js text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.toml text eol=lf
+*.ini text eol=lf
+*.txt text eol=lf
+*.spec text eol=lf
+*.pem text eol=lf
+*.svg text eol=lf
+.gitignore text eol=lf
+LICENSE text eol=lf
+.githooks/* text eol=lf
+
+# Binary assets
+*.ico binary

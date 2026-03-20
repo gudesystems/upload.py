@@ -97,7 +97,7 @@ The repository includes an automated **dev release** workflow in `.github/workfl
 
 Trigger:
 
-- Push/merge to branch `dev` (or run manually via **workflow_dispatch**).
+- Manual run via **workflow_dispatch**.
 
 What it does:
 
@@ -112,7 +112,13 @@ What it does:
 
 Result:
 
-- You can continue your normal flow (merge to `dev`), and the release/tag/versioning is generated automatically.
+- Dev pre-releases are created only when manually triggered from GitHub Actions.
+
+## License and Brand Assets
+
+- Source code in this repository is licensed under the terms in `LICENSE`.
+- GUDE logos and brand assets are excluded from that license.
+- See `TRADEMARKS.md` for the explicit trademark/logo restrictions and file list.
 
 ### Preparation
 
