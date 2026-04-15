@@ -264,21 +264,21 @@
               <input class="form-check-input" type="radio" name="exportMode" id="exportModeDraftSelection"
                 value="draft_selection" checked>
               <label class="form-check-label" for="exportModeDraftSelection" id="exportModeDraftSelectionLabel">
-                Current device list (Selection)
+                Current selection (0)
               </label>
             </div>
             <div class="form-check mb-2">
               <input class="form-check-input" type="radio" name="exportMode" id="exportModeDraftAll"
                 value="draft_all">
               <label class="form-check-label" for="exportModeDraftAll" id="exportModeDraftAllLabel">
-                Current device list (All)
+                All items in list (0)
               </label>
             </div>
             <div class="form-check">
               <input class="form-check-input" type="radio" name="exportMode" id="exportModeUploadIni"
                 value="upload_ini">
               <label class="form-check-label" for="exportModeUploadIni" id="exportModeUploadIniLabel">
-                Stored device list (upload.ini)
+                All saved items in upload.ini (0)
               </label>
             </div>
           </div>
@@ -879,9 +879,9 @@
       const draftAllLabel = document.getElementById('exportModeDraftAllLabel');
       const uploadIniLabel = document.getElementById('exportModeUploadIniLabel');
       const selRadio = document.getElementById('exportModeDraftSelection');
-      if (draftSelLabel) draftSelLabel.textContent = `Current device list (Selection: ${selectedCount} host(s))`;
-      if (draftAllLabel) draftAllLabel.textContent = `Current device list (All: ${allDraftCount} host(s))`;
-      if (uploadIniLabel) uploadIniLabel.textContent = `Stored device list (upload.ini: ${persistedHosts.size} host(s))`;
+      if (draftSelLabel) draftSelLabel.textContent = `Current selection (${selectedCount})`;
+      if (draftAllLabel) draftAllLabel.textContent = `All items in list (${allDraftCount})`;
+      if (uploadIniLabel) uploadIniLabel.textContent = `All saved items in upload.ini (${persistedHosts.size})`;
       if (selRadio) selRadio.checked = true;
 
       const modalEl = document.getElementById('exportOptionsModal');
