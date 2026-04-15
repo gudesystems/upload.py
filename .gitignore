@@ -141,6 +141,9 @@ error_25.05.23.txt
 test.ini
 .vscode/launch.json
 tests/
+!tests/
+tests/*
+!tests/test_firmware_target.py
 tools/
 gude/_unnecessary_work.py
 gude/version.offline.ini

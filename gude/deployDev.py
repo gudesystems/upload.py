@@ -4,6 +4,11 @@ import time
 import requests
 import threading
 from gude.httpDevice import HttpDevice
+from gude.firmware_target import (
+    format_firmware_version_for_display,
+    is_explicit_firmware_selection,
+    resolve_configured_firmware_version,
+)
 
 from gude.gblib import print_progress_bar
 
@@ -92,11 +97,17 @@ class DeployDev(HttpDevice):
         prodid = device_data['prodid']
         dev_version = device_data['firm_v']
         initial_dev_version = dev_version # Store initial version for reporting
+        filename_template = cfg.get(prodid, 'filename', fallback='').strip()
+        configured_version = cfg.get(prodid, 'version', fallback='').strip()
+        explicit_selection = is_explicit_firmware_selection(filename_template)
 
         # Reset connection error info for this attempt
         self.firmware_upload_connection_error_info = None
 
-        if online_update:
+        if explicit_selection:
+            latest_version = resolve_configured_firmware_version(prodid, filename_template, configured_version)
+            fw_filename = filename_template
+        elif online_update:
             # check online JSON for latest version
             # check if subpath is used
             if cfg.has_option(prodid, 'subpath'):
@@ -105,19 +116,24 @@ class DeployDev(HttpDevice):
                 url = f"{cfg['url']['basepath']}/{cfg[prodid]['json']}"
             log.info(f"[{self.host}] downloading {url}")
             latest_version = requests.get(url).json()[0]['version']
+            fw_filename = filename_template.replace('{version}', latest_version)
         else:
-            latest_version = cfg[prodid]['version']
+            latest_version = configured_version
+            fw_filename = filename_template.replace('{version}', latest_version)
+
+        expected_target_version = format_firmware_version_for_display(prodid, latest_version)
+        target_log_value = expected_target_version or fw_filename
 
         needs_update = forced
         if not forced:
-            # Logic for checking if update is needed
-            if 'R2' in prodid and ("R2" not in latest_version and "r2" not in latest_version) and 'BUILD' not in dev_version:
-                needs_update = (latest_version + '-R2' != dev_version)
+            if expected_target_version:
+                needs_update = (expected_target_version != dev_version)
             else:
-                needs_update = (latest_version != dev_version)
+                # If we cannot infer the version for a custom file, still allow the update.
+                needs_update = True
 
         if not needs_update:
-            log.warning(f"\tDevice Firmware v{dev_version} is already expected v{latest_version} or v{latest_version + '-R2' if 'R2' in prodid else ''} : no update needed")
+            log.warning(f"\tDevice Firmware v{dev_version} is already expected v{target_log_value} : no update needed")
             return {
                 "updated": False,
                 "initial_version": initial_dev_version,
@@ -126,13 +142,12 @@ class DeployDev(HttpDevice):
                 "upload_notes": None
             }
 
-        fw_filename = cfg[prodid]['filename'].replace('{version}', latest_version)
         if cfg.has_option(prodid, 'path'):
             fw_dir = cfg[prodid]['path']
         local_filename = os.path.join(os.path.join(fw_dir, fw_filename))
 
         if not os.path.isfile(local_filename):
-            if online_update:
+            if online_update and not explicit_selection:
                 # download latest firmware
                 if cfg.has_option(prodid, 'subpath'):
                     url = f"{cfg['url']['basepath']}/{cfg[prodid]['subpath']}/{fw_filename}"
@@ -153,24 +168,15 @@ class DeployDev(HttpDevice):
                 else:
                     raise ValueError(f"Firmware file not found (online): {local_filename}")
             else:
-                raise ValueError(f"Firmware file not found (offline): {local_filename}")
+                raise ValueError(f"Firmware file not found: {local_filename}")
 
-        log.info(f"[{self.host}] updating to Firmware v{latest_version}")
-
-        fw_content = self.get_file_content(local_filename, "rb")
-        if fw_content is None: # Should be caught by ValueError above if file not found
-             raise ValueError(f"Could not read firmware file content: {local_filename}")
-        
-        log.info(f"[{self.host}] uploading {fw_filename}, please wait...")
-
-        self.fw = fw_content # Set self.fw for the thread
-
-        log.info(f"[{self.host}] updating to Firmware v{latest_version}")
+        if explicit_selection:
+            log.info(f"[{self.host}] using selected firmware file {fw_filename}")
+        log.info(f"[{self.host}] updating to Firmware v{target_log_value}")
 
         fw_content = self.get_file_content(local_filename, "rb")
         if fw_content is None: # Should be caught by ValueError above if file not found
              raise ValueError(f"Could not read firmware file content: {local_filename}")
-        
         log.info(f"[{self.host}] uploading {fw_filename}, please wait...")
 
         self.fw = fw_content # Set self.fw for the thread
@@ -256,20 +262,24 @@ class DeployDev(HttpDevice):
                 log.info(f"[{self.host}] Device rebooted. Current firmware version: {new_actual_version}")
 
                 # Determine if update was successful based on version comparison
-                expected_target_version = latest_version
-                if 'R2' in prodid and ("R2" not in latest_version and "r2" not in latest_version) and 'BUILD' not in new_actual_version:
-                    expected_target_version = latest_version + '-R2'
+                expected_target_version = format_firmware_version_for_display(prodid, latest_version)
 
-                is_successful_fw_update = (new_actual_version == expected_target_version)
+                if expected_target_version:
+                    is_successful_fw_update = (new_actual_version == expected_target_version)
 
-                if is_successful_fw_update:
-                    status_message = f"updated from {initial_dev_version} to {new_actual_version}"
-                    if self.firmware_upload_connection_error_info:
-                        upload_notes_message = f"Transient connection error during upload ({self.firmware_upload_connection_error_info}), but update succeeded."
+                    if is_successful_fw_update:
+                        status_message = f"updated from {initial_dev_version} to {new_actual_version}"
+                        if self.firmware_upload_connection_error_info:
+                            upload_notes_message = f"Transient connection error during upload ({self.firmware_upload_connection_error_info}), but update succeeded."
+                    else:
+                        status_message = f"failed: version mismatch post-update (expected {expected_target_version}, got {new_actual_version})"
+                        if self.firmware_upload_connection_error_info:
+                             upload_notes_message = f"Original upload connection error: {self.firmware_upload_connection_error_info}."
                 else:
-                    status_message = f"failed: version mismatch post-update (expected {expected_target_version}, got {new_actual_version})"
+                    is_successful_fw_update = True
+                    status_message = f"firmware file {fw_filename} applied; current version {new_actual_version}"
                     if self.firmware_upload_connection_error_info:
-                         upload_notes_message = f"Original upload connection error: {self.firmware_upload_connection_error_info}."
+                        upload_notes_message = f"Transient connection error during upload ({self.firmware_upload_connection_error_info}), but device rebooted with firmware {new_actual_version}."
             except (requests.exceptions.RequestException, ValueError) as e:
                 log.error(f"Failed to get device status after reboot: {e}")
                 status_message = f"failed: could not verify version after reboot ({e})"

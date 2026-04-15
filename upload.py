@@ -14,6 +14,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 
 from gude.deployDev import DeployDev
+from gude.firmware_target import (
+    format_firmware_version_for_display,
+    is_explicit_firmware_selection,
+    resolve_configured_firmware_version,
+)
 from gude.gblib import Gblib
 import json
 import re
@@ -795,6 +800,7 @@ class DeviceResult:
     url: Optional[str] = None
     latest_known_firmware: Optional[str] = None
     latest_publish_date: Optional[str] = None
+    target_is_custom: bool = False
     selected_prodid: Optional[str] = None
     status_only: bool = False
     final_firmware: Optional[str] = None
@@ -1044,25 +1050,33 @@ def iterate_list(
                 device_data["prodid"] = selected_prod_id # Update prodid for update_firmware call
                 # Track selected product id for summary/use
                 result.selected_prodid = selected_prod_id
-                # Derive display version including R2 suffix where applicable
-                disp_version = selected_version or "unknown"
-                if selected_version and ("R2" in selected_prod_id or selected_prod_id.endswith('R2')):
-                    if ('-R2' not in selected_version) and ('-r2' not in selected_version):
-                        disp_version = f"{selected_version}-R2"
+                target_filename = _firmware.get(selected_prod_id, 'filename', fallback='').strip()
+                result.target_is_custom = is_explicit_firmware_selection(target_filename)
+                effective_target_version = selected_version
+                if result.target_is_custom:
+                    effective_target_version = resolve_configured_firmware_version(
+                        selected_prod_id,
+                        target_filename,
+                        _firmware.get(selected_prod_id, 'version', fallback=''),
+                    )
+                disp_version = format_firmware_version_for_display(selected_prod_id, effective_target_version) or target_filename or "unknown"
                 result.latest_known_firmware = disp_version
                 # Determine publish date for latest known version (prefer model 'date' for online sources)
                 try:
-                    if _args.onlineupdate and _firmware.has_option(selected_prod_id, 'date'):
+                    if result.target_is_custom:
+                        result.latest_publish_date = None
+                    elif _args.onlineupdate and _firmware.has_option(selected_prod_id, 'date'):
                         result.latest_publish_date = _firmware.get(selected_prod_id, 'date')
                     elif _firmware.has_section('url') and _firmware.has_option('url', 'last_update'):
                         result.latest_publish_date = _firmware.get('url', 'last_update')
                 except Exception:
                     result.latest_publish_date = None
+                firmware_label = "selected target" if result.target_is_custom else "latest known"
                 log.info(
                     f"{device_data['product_name']} "
                     f"({actual_prod_id} -> {selected_prod_id}, {mac}) at {ip}\n"
                     + " " * (len(f"{device_data['product_name']} ({actual_prod_id} -> {selected_prod_id}, {mac}) at {ip}") - len(f"running Firmware v{device_data['firm_v']}")) # Align logging
-                    + f"running Firmware v{device_data['firm_v']}, latest known: {result.latest_known_firmware}"
+                    + f"running Firmware v{device_data['firm_v']}, {firmware_label}: {result.latest_known_firmware}"
                 )
             else:
                 log.warning(f"No firmware entry found for product '{actual_prod_id}' (original) or suitable replacement.")
@@ -1282,9 +1296,12 @@ def main() -> None:
         if res_item.final_firmware and res_item.final_firmware != res_item.initial_firmware:
             device_fw.append(f"{res_item.final_firmware}(current)")
         else:
-            # Prefer per-version publish date when available (esp. onlineupdate)
-            last_update = res_item.latest_publish_date if res_item.latest_publish_date else (firmware["url"]["last_update"] if firmware.has_section("url") and firmware.has_option("url", "last_update") else "known")
-            device_fw.append(f"{res_item.latest_known_firmware}(latest {last_update})")
+            if res_item.target_is_custom:
+                device_fw.append(f"{res_item.latest_known_firmware}(selected)")
+            else:
+                # Prefer per-version publish date when available (esp. onlineupdate)
+                last_update = res_item.latest_publish_date if res_item.latest_publish_date else (firmware["url"]["last_update"] if firmware.has_section("url") and firmware.has_option("url", "last_update") else "known")
+                device_fw.append(f"{res_item.latest_known_firmware}(latest {last_update})")
             
         log.info(", ".join(device_info))
         log.info("   FW: "+", ".join(device_fw))

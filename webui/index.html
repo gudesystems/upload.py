@@ -1024,7 +1024,8 @@
         parts.push(`${r.final_firmware} (current)`);
       } else if (r.latest_known_firmware) {
         const date = (r.latest_publish_date && String(r.latest_publish_date).trim()) ? ` ${r.latest_publish_date}` : '';
-        parts.push(`${r.latest_known_firmware} (latest${date ? ' ' + r.latest_publish_date : ''})`);
+        const label = r.target_is_custom ? 'selected' : 'latest';
+        parts.push(`${r.latest_known_firmware} (${label}${date ? ' ' + r.latest_publish_date : ''})`);
       }
       return parts.join(', ');
     };
