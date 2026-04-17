@@ -2,12 +2,13 @@ import json
 import os
 import sys
 import threading
+import time
 import webbrowser
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Dict
 import logging
 
 log = logging.getLogger("webui")
@@ -30,9 +31,119 @@ from upload import run_processing_from_options, DeviceResult, save_device_to_con
 
 class State:
     running: bool = False
-    running: bool = False
     results: List[DeviceResult] = []
     progress: dict = {}
+
+
+class UiSessionMonitor:
+    HEARTBEAT_TIMEOUT_SECS = 90.0
+    SHUTDOWN_GRACE_SECS = 2.0
+    WATCHDOG_INTERVAL_SECS = 0.5
+
+    enabled: bool = False
+    ever_connected: bool = False
+    sessions: Dict[str, float] = {}
+    shutdown_deadline: Optional[float] = None
+    server: Optional[ThreadingHTTPServer] = None
+    watcher_thread: Optional[threading.Thread] = None
+    stop_event = threading.Event()
+    lock = threading.Lock()
+
+    @classmethod
+    def configure(cls, server: ThreadingHTTPServer, enabled: bool) -> None:
+        cls.stop()
+        cls.enabled = enabled
+        cls.ever_connected = False
+        cls.sessions = {}
+        cls.shutdown_deadline = None
+        cls.server = server
+        if not enabled:
+            return
+
+        cls.stop_event = threading.Event()
+        cls.watcher_thread = threading.Thread(
+            target=cls._watchdog_loop,
+            name="webui-session-watchdog",
+            daemon=True,
+        )
+        cls.watcher_thread.start()
+
+    @classmethod
+    def stop(cls) -> None:
+        cls.stop_event.set()
+        cls.enabled = False
+        cls.shutdown_deadline = None
+        cls.sessions = {}
+        cls.server = None
+        cls.watcher_thread = None
+
+    @classmethod
+    def open_session(cls, session_id: str) -> int:
+        return cls._record_activity(session_id)
+
+    @classmethod
+    def ping_session(cls, session_id: str) -> int:
+        return cls._record_activity(session_id)
+
+    @classmethod
+    def close_session(cls, session_id: str) -> int:
+        if not cls.enabled or not session_id:
+            return 0
+
+        now = time.monotonic()
+        with cls.lock:
+            cls.sessions.pop(session_id, None)
+            active_sessions = len(cls.sessions)
+            if cls.ever_connected and active_sessions == 0:
+                cls.shutdown_deadline = now + cls.SHUTDOWN_GRACE_SECS
+        return active_sessions
+
+    @classmethod
+    def _record_activity(cls, session_id: str) -> int:
+        if not cls.enabled or not session_id:
+            return 0
+
+        now = time.monotonic()
+        with cls.lock:
+            cls.sessions[session_id] = now
+            cls.shutdown_deadline = None
+            cls.ever_connected = True
+            return len(cls.sessions)
+
+    @classmethod
+    def _watchdog_loop(cls) -> None:
+        while not cls.stop_event.wait(cls.WATCHDOG_INTERVAL_SECS):
+            shutdown_server = None
+            now = time.monotonic()
+            with cls.lock:
+                stale_sessions = [
+                    session_id
+                    for session_id, last_seen in cls.sessions.items()
+                    if (now - last_seen) > cls.HEARTBEAT_TIMEOUT_SECS
+                ]
+                for session_id in stale_sessions:
+                    cls.sessions.pop(session_id, None)
+
+                if cls.ever_connected and not cls.sessions and cls.shutdown_deadline is None:
+                    cls.shutdown_deadline = now + cls.SHUTDOWN_GRACE_SECS
+
+                if (
+                    cls.enabled
+                    and cls.server is not None
+                    and cls.ever_connected
+                    and not cls.sessions
+                    and cls.shutdown_deadline is not None
+                    and now >= cls.shutdown_deadline
+                    and not State.running
+                ):
+                    shutdown_server = cls.server
+                    cls.shutdown_deadline = None
+                    cls.stop_event.set()
+
+            if shutdown_server is not None:
+                log.info("No active Web UI session remains. Shutting down backend.")
+                shutdown_server.shutdown()
+                return
 
 def _base_dir() -> Path:
     """Return directory containing index.html/assets, both in src and frozen builds."""
@@ -165,6 +276,21 @@ class Handler(BaseHTTPRequestHandler):
             for k, v in headers.items():
                 self.send_header(k, v)
         self.end_headers()
+
+    def _read_json_body(self) -> dict:
+        try:
+            length = int(self.headers.get('Content-Length', '0') or '0')
+        except (ValueError, TypeError):
+            return {}
+
+        raw = self.rfile.read(length) if length > 0 else b'{}'
+        if not raw:
+            return {}
+
+        try:
+            return json.loads(raw.decode('utf-8'))
+        except Exception:
+            return {}
 
     def log_message(self, format, *args):
         # Suppress /api/devices logs by moving them to DEBUG level
@@ -446,6 +572,32 @@ class Handler(BaseHTTPRequestHandler):
             self._send(500)
             self.wfile.write(b"Internal Error")
 
+    def _api_session(self, action: str):
+        body = self._read_json_body()
+        session_id = str(body.get('session_id', '')).strip()
+        if not session_id:
+            self._send(400, {"Content-Type": "application/json; charset=utf-8"})
+            self.wfile.write(json.dumps({"success": False, "error": "session_id is required"}).encode('utf-8'))
+            return
+
+        if action == 'open':
+            active_sessions = UiSessionMonitor.open_session(session_id)
+        elif action == 'ping':
+            active_sessions = UiSessionMonitor.ping_session(session_id)
+        elif action == 'close':
+            active_sessions = UiSessionMonitor.close_session(session_id)
+        else:
+            self._send(400, {"Content-Type": "application/json; charset=utf-8"})
+            self.wfile.write(json.dumps({"success": False, "error": "invalid session action"}).encode('utf-8'))
+            return
+
+        self._send(200, {"Content-Type": "application/json; charset=utf-8"})
+        self.wfile.write(json.dumps({
+            "success": True,
+            "active_sessions": active_sessions,
+            "auto_shutdown_enabled": UiSessionMonitor.enabled,
+        }).encode('utf-8'))
+
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path
@@ -474,6 +626,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._api_update()
         if path == '/api/run':
             return self._api_run()
+        if path == '/api/session/open':
+            return self._api_session('open')
+        if path == '/api/session/ping':
+            return self._api_session('ping')
+        if path == '/api/session/close':
+            return self._api_session('close')
         if path == '/api/upload_firmware':
             return self._api_upload_firmware()
         elif self.path == '/api/upload_config':
@@ -636,8 +794,12 @@ class Handler(BaseHTTPRequestHandler):
 
 def serve(host: str = '127.0.0.1', port: int = 8000, *, open_browser: bool = False):
     httpd = ThreadingHTTPServer((host, port), Handler)
+    auto_shutdown_enabled = open_browser and host in ('127.0.0.1', 'localhost')
+    UiSessionMonitor.configure(httpd, enabled=auto_shutdown_enabled)
     url = f"http://localhost:{port}"
     print(f"Web UI available at http://{host}:{port}")
+    if auto_shutdown_enabled:
+        print("Backend auto-exit is enabled when all Web UI tabs are closed.")
     # Open the default browser if requested
     if open_browser:
         try:
@@ -650,6 +812,7 @@ def serve(host: str = '127.0.0.1', port: int = 8000, *, open_browser: bool = Fal
     except KeyboardInterrupt:
         pass
     finally:
+        UiSessionMonitor.stop()
         httpd.server_close()
 
 

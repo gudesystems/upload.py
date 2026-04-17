@@ -574,6 +574,10 @@
     const lastNoteByDevice = {};
     let notificationUnreadCount = 0;
     const notificationMaxItems = 200;
+    const UI_SESSION_PING_INTERVAL_MS = 15000;
+    let uiSessionId = '';
+    let uiSessionHeartbeatTimer = null;
+    let uiSessionClosed = false;
 
     function normalizeHostKey(v) {
       return String(v || '').trim();
@@ -598,6 +602,81 @@
         .replace(/>/g, '&gt;')
         .replace(/\"/g, '&quot;')
         .replace(/'/g, '&#39;');
+    }
+
+    function createUiSessionId() {
+      if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+        return window.crypto.randomUUID();
+      }
+      return `ui-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+
+    function uiSessionPayload() {
+      return JSON.stringify({ session_id: uiSessionId });
+    }
+
+    async function postUiSessionEvent(path, keepalive) {
+      if (!uiSessionId) return;
+      await fetch(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: uiSessionPayload(),
+        keepalive: !!keepalive
+      });
+    }
+
+    async function openUiSession() {
+      uiSessionId = createUiSessionId();
+      uiSessionClosed = false;
+      try {
+        await postUiSessionEvent('/api/session/open', true);
+      } catch (e) {
+        console.debug('UI session open failed', e);
+      }
+    }
+
+    async function pingUiSession() {
+      if (!uiSessionId || uiSessionClosed) return;
+      try {
+        await postUiSessionEvent('/api/session/ping', false);
+      } catch (e) {
+        console.debug('UI session ping failed', e);
+      }
+    }
+
+    function startUiSessionHeartbeat() {
+      if (uiSessionHeartbeatTimer) {
+        window.clearInterval(uiSessionHeartbeatTimer);
+      }
+      uiSessionHeartbeatTimer = window.setInterval(() => {
+        pingUiSession();
+      }, UI_SESSION_PING_INTERVAL_MS);
+    }
+
+    function closeUiSession() {
+      if (!uiSessionId || uiSessionClosed) return;
+      uiSessionClosed = true;
+
+      if (uiSessionHeartbeatTimer) {
+        window.clearInterval(uiSessionHeartbeatTimer);
+        uiSessionHeartbeatTimer = null;
+      }
+
+      const payload = uiSessionPayload();
+      try {
+        if (navigator.sendBeacon) {
+          navigator.sendBeacon('/api/session/close', new Blob([payload], { type: 'application/json' }));
+        } else {
+          fetch('/api/session/close', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: payload,
+            keepalive: true
+          }).catch(() => { });
+        }
+      } catch (e) {
+        console.debug('UI session close failed', e);
+      }
     }
 
     function formatNotificationTimestamp(value) {
@@ -1892,6 +1971,25 @@
       e.returnValue = '';
     });
 
+    window.addEventListener('pagehide', function () {
+      closeUiSession();
+    });
+
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) {
+        pingUiSession();
+      }
+    });
+
+    window.addEventListener('pageshow', function (event) {
+      if (event.persisted) {
+        openUiSession().then(() => {
+          startUiSessionHeartbeat();
+          pingUiSession();
+        });
+      }
+    });
+
     const markNotificationsReadLink = document.getElementById('markNotificationsRead');
     if (markNotificationsReadLink) {
       markNotificationsReadLink.addEventListener('click', markAllNotificationsRead);
@@ -1902,6 +2000,8 @@
     // 1) read persisted hosts from upload.ini for draft baseline
     // 2) run refresh without UDP broadcast to query hosts from INI
     (async function initPage() {
+      await openUiSession();
+      startUiSessionHeartbeat();
       await loadPersistedHostsFromDisk();
       await runRefresh(false);
       fetchFirmwareList();
