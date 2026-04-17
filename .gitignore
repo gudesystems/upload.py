@@ -2,6 +2,10 @@ fw/*.bin
 *.xlsx
 *.bak
 *.png
+!screenshots/
+!screenshots/sample_fw-selection.png
+!screenshots/sample_list_change-deselect_192.168.2.80.png
+!screenshots/sample_confirm-update-changes_model.png
 test*.py
 test*.ini
 

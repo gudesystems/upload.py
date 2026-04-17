@@ -2,7 +2,7 @@
 `upload.py` is a Script-Tool that aims to automatically deploy firmware updates, 
 configuration and/or ssl certificates to multiple **Gude Systems GmbH PDU devices**
 
-The Firmware udpates can be obtained automatically (by using `--onlineupdates`) or manually.
+Firmware updates can be obtained automatically (by using `--onlineupdate`) or manually.
 
 Device configuration and ssl certificates, can be prepared beforehand.
 
@@ -58,9 +58,9 @@ Import flow:
 Export flow:
 
 - `Export Device List` offers:
-  - **Current device list (Selection: N host(s))**
-  - **Current device list (All: N host(s))**
-  - **Stored device list (upload.ini: N host(s))**
+  - **Current selection (N)**
+  - **All items in list (N)**
+  - **All saved items in upload.ini (N)**
 
 ### Firmware/Config/SSL Update Behavior (GUI)
 
@@ -77,7 +77,7 @@ Export flow:
 If `upload.ini` is missing or contains no hosts and GBL is disabled, the GUI starts with an empty list.  
 Use **Find Devices** in GUI or provide hosts / `gbl=search` in `upload.ini`.
 
-### Screenshots
+### Embedded Screenshots
 
 Firmware selection:
 
@@ -93,7 +93,7 @@ Update confirmation dialog:
 
 ## Dev Release Pipeline (GitHub Actions)
 
-The repository includes an automated **dev release** workflow in `.github/workflows/dev-release.yml`.
+The repository includes a manual **dev release** workflow in `.github/workflows/dev-release.yml`.
 
 Trigger:
 
@@ -148,7 +148,7 @@ Result:
     - download firmware binary files to `fw/*.bin`
     - set target version in `fw/version.ini`
   - to get online files and run offline updates later
-    - run `onlineupdates.py` in subdir `fw/`
+    - run `fw/onlineupdate.py`
     - this will download all binary files to `fw/*.bin`, and sets `fw/version.ini` accordingly
 
 - Prepare custom configuration and save it under `config/`
