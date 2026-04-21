@@ -786,6 +786,20 @@ def generate_ip_list(_hosts_config: ConfigParser, _my_ip: str, _gbl_timeout: flo
     return sorted(final_list)
 
 
+def format_device_log_label(
+    host: str,
+    port: Optional[int] = None,
+    use_ssl: bool = False,
+    job_id: Optional[str] = None,
+) -> str:
+    endpoint = str(host)
+    if port is not None:
+        default_port = 443 if use_ssl else 80
+        if port != default_port:
+            endpoint = f"{endpoint}:{port}"
+    return f"{job_id} {endpoint}" if job_id else endpoint
+
+
 @dataclass
 class DeviceResult:
     ip: str
@@ -808,6 +822,7 @@ class DeviceResult:
     firmware_upload_notes: Optional[str] = None
     success: bool = False
     error_message: Optional[str] = None
+    job_id: Optional[str] = None
 
 
 def iterate_list(
@@ -834,6 +849,11 @@ def iterate_list(
 
     concurrency = int(getattr(_args, 'device_concurrency', 1) or 1)
     use_progress_bar = (concurrency <= 1)
+    show_job_id = (concurrency > 1)
+    job_id_map = {
+        str(ip_item): f"job-{idx:02d}"
+        for idx, ip_item in enumerate(_ip_list, start=1)
+    }
 
     results: List[DeviceResult] = [] # Type hint for results
     log.debug(f"trying {len(_ip_list)} devices")
@@ -848,8 +868,9 @@ def iterate_list(
 
     def _process_device(ip_str_or_obj: Any) -> DeviceResult:
         ip = str(ip_str_or_obj) # Ensure ip is a string for consistency
-        result = DeviceResult(ip=ip, product_name="unknown", mac="unknown", initial_firmware="unknown")
-        emit({"type": "device_start", "ip": ip})
+        job_id = job_id_map.get(ip) if show_job_id else None
+        result = DeviceResult(ip=ip, product_name="unknown", mac="unknown", initial_firmware="unknown", job_id=job_id)
+        emit({"type": "device_start", "ip": ip, "job_id": job_id})
         
         def append_status_note(note: str) -> None:
             """Append an additional action summary to the visible per-device status text."""
@@ -863,7 +884,7 @@ def iterate_list(
             result.firmware_status = f"{result.firmware_status}; {note}"
         
         try:
-            log.debug(f"Processing device: {ip}")
+            log.debug(f"[{format_device_log_label(ip, job_id=job_id)}] Processing device")
 
             #if ip not in ["gwtestnet1.gude.local:38221", "gwtestnet1.gude.local:38226"]:
             #    continue
@@ -894,7 +915,7 @@ def iterate_list(
                     config_key = key_option
                     break
 
-            log.debug(f"Using config-key '{config_key}' for device {ip}")
+            log.debug(f"[{format_device_log_label(ip, job_id=job_id)}] Using config-key '{config_key}'")
 
             # Determine connection settings
             # Avoid mutating shared config during concurrency
@@ -902,6 +923,7 @@ def iterate_list(
             use_ssl = _config.getboolean(config_key, 'ssl', fallback=_config.getboolean('httpDefaults', 'ssl', fallback=False))
             # Apply to device
             dev.set_http_port(port, use_ssl)
+            dev.set_log_job_id(job_id)
             dev.set_basic_auth(_config.getboolean(config_key, 'auth', fallback=False),
                                _config.get(config_key, 'username', fallback=''),
                                _config.get(config_key, 'password', fallback=''))
@@ -914,27 +936,44 @@ def iterate_list(
             result.conn_ssl = use_ssl
             proto = 'https' if use_ssl else 'http'
             result.url = f"{proto}://{dev_ip_for_conn}:{port}"
-            
+
+            mac = "unknown-mac"
+            if not getattr(_args, 'nogbl', False):
+                try:
+                    log.info(f"[{dev.get_log_label()}] Attempting to get MAC via GBL/UDP...")
+                    _gbl = Gblib()
+                    if not _gbl.check_mac(str(dev_ip_for_conn)):
+                        log.warning(f"[{dev.get_log_label()}] GBL timeout (UDP port 50123)")
+                    else:
+                        # Keep the historical config filename format: aa_bb_cc_dd_ee_ff.
+                        mac = '_'.join(f'{c:02x}' for c in _gbl.dstMAC)
+                        log.info(f"[{dev.get_log_label()}] Got MAC {mac} via GBL.")
+                except (gaierror, ConnectionResetError, OSError) as e_gbl:
+                    log.warning(f"[{dev.get_log_label()}] GBL MAC retrieval failed: {e_gbl}")
+            else:
+                log.debug(f"[{dev.get_log_label()}] GBL MAC lookup skipped by --nogbl.")
+            result.mac = mac
+
             try:
                 device_data = dev.http_get_status_json(DeployDev.JSON_STATUS_MISC)['misc']
             except HTTPError as e:
                 if e.response.status_code == 401:
-                    log.error(f"Authentication Error on defined port/protocol for {ip}: {e}")
+                    log.error(f"[{dev.get_log_label()}] Authentication error on configured port/protocol: {e}")
                     result.error_message = f"Authentication Error: {e}"
                     #continue
                     return result
                 else:
-                    log.error(f"HTTPError for {ip}: {e}")
+                    log.error(f"[{dev.get_log_label()}] HTTPError: {e}")
                     result.error_message = f"HTTPError: {e}"
                     #continue # Re-raise if you want to stop all processing
                     return result
             except (Timeout, ConnectionError) as ce: # Catch Timeout and ConnectionError
-                log.error(f"Could not reach device on defined port/protocol for {ip}: {ce}")
+                log.error(f"[{dev.get_log_label()}] Could not reach device on configured port/protocol: {ce}")
                 result.error_message = f"Connection/Timeout Error: {ce}"
                 #continue
                 return result
             except Exception as e_misc: # Catch other potential errors during initial status fetch
-                log.error(f"Unexpected error fetching initial status for {ip}: {e_misc}")
+                log.error(f"[{dev.get_log_label()}] Unexpected error fetching initial status: {e_misc}")
                 result.error_message = f"Unexpected initial status error: {e_misc}"
                 #continue
                 return result
@@ -943,39 +982,19 @@ def iterate_list(
             result.hostname = device_data.get('hostname')
             result.initial_firmware = device_data['firm_v']
 
-            gbl_error = False
-            mac = "unknown-mac"
-            # Respect optional args.nogbl; default to False when missing
-            if not getattr(_args, 'nogbl', False):
-                try:
-                    log.info(f"[{ip}] Attempting to get MAC for {ip} via GBL/UDP...")
-                    # Create a fresh GBL instance per device to avoid shared state in threads
-                    _gbl = Gblib()
-                    if not _gbl.check_mac(str(dev_ip_for_conn)): # Use dev_ip_for_conn which should be clean IP
-                        log.warning(f"GBL Timeout (UDP port 50123) for {dev_ip_for_conn}")
-                        gbl_error = True
-                    else:
-                        # extract mac (bytes longer than 255 result in two hex values so b'\x192' results in 1*16+9 and 2*16+0)
-                        # this dec values need to be converted back to hex ('x') as string with the length 2 ('02')
-                        mac = '_'.join(f'{c:02x}' for c in _gbl.dstMAC)
-                        log.info(f"[{ip}] Got MAC {mac} for {dev_ip_for_conn} via GBL.")
-                except (gaierror, ConnectionResetError, OSError) as e_gbl: # OSError for network unreachable
-                    log.warning(f"GBL MAC retrieval failed for {dev_ip_for_conn}: {e_gbl}")
-                    gbl_error = True
-                
-            if gbl_error:
-                log.info(f"[{ip}] Falling back to HTTP(S) to get MAC for {dev_ip_for_conn}...")
+            if mac == "unknown-mac":
+                log.info(f"[{dev.get_log_label()}] Falling back to HTTP(S) to get MAC...")
                 try:
                     mac_http = dev.http_get_status_json(DeployDev.JSON_STATUS_ETHERNET, req_headers=None)['ethernet']['mac']
                     mac = mac_http.replace(':', '_')
-                    log.info(f"[{ip}] Got MAC {mac} for {dev_ip_for_conn} via HTTP(S).")
+                    log.info(f"[{dev.get_log_label()}] Got MAC {mac} via HTTP(S).")
                 except (RequestException, ValueError, TimeoutError) as e_http_mac:
-                    log.error(f"Could not get MAC via HTTP(S) for {dev_ip_for_conn}: {e_http_mac}")
+                    log.error(f"[{dev.get_log_label()}] Could not get MAC via HTTP(S): {e_http_mac}")
                     # Keep mac as "unknown-mac" or previous GBL error value
 
             result.mac = mac
 
-            log.debug(f"Getting config filename for MAC {mac}, IP {ip}...")
+            log.debug(f"[{dev.get_log_label()}] Getting config filename for MAC {mac}, IP {ip}...")
             
             # Check for custom config override
             custom_config_map = getattr(_args, 'custom_config', None) or {}
@@ -990,7 +1009,7 @@ def iterate_list(
             # Pass explicit_filename if we have one (not RESET, and not None)
             cfg_filename = DeployDev.get_config_filename('config', 'config', 'txt', mac, ip, _args.configip, explicit_filename=explicit_config_file)
             
-            log.debug(f"Getting ssl-cert filename for MAC {mac}, IP {ip}...")
+            log.debug(f"[{dev.get_log_label()}] Getting SSL certificate filename for MAC {mac}, IP {ip}...")
             
             # Check for custom ssl override
             custom_ssl_map = getattr(_args, 'custom_ssl', None) or {}
@@ -1007,7 +1026,7 @@ def iterate_list(
 
             if skip_ssl:
                 ssl_cert_filename = None
-                log.info(f"[{ip}] SSL Upload skipped by user request.")
+                log.info(f"[{dev.get_log_label()}] SSL upload skipped by user request.")
             else:
                 ssl_cert_filename = DeployDev.get_config_filename('ssl', 'cert', 'pem', mac, ip, _args.configip, explicit_filename=explicit_ssl_file)
 
@@ -1038,7 +1057,7 @@ def iterate_list(
                     fw_dir_default=fw_dir_default,
                 )
                 if fallback_prodid:
-                    log.info(f"[{ip}] Offline fallback: using compatible firmware section '{fallback_prodid}' instead of '{selected_prod_id}'")
+                    log.info(f"[{dev.get_log_label()}] Offline fallback: using compatible firmware section '{fallback_prodid}' instead of '{selected_prod_id}'")
                     selected_prod_id = fallback_prodid
                     selected_version = _firmware.get(selected_prod_id, 'version', fallback=selected_version)
                     if result.firmware_upload_notes:
@@ -1074,12 +1093,12 @@ def iterate_list(
                 firmware_label = "selected target" if result.target_is_custom else "latest known"
                 log.info(
                     f"{device_data['product_name']} "
-                    f"({actual_prod_id} -> {selected_prod_id}, {mac}) at {ip}\n"
-                    + " " * (len(f"{device_data['product_name']} ({actual_prod_id} -> {selected_prod_id}, {mac}) at {ip}") - len(f"running Firmware v{device_data['firm_v']}")) # Align logging
+                    f"({actual_prod_id} -> {selected_prod_id}, {mac}) at {dev.get_log_label()}\n"
+                    + " " * (len(f"{device_data['product_name']} ({actual_prod_id} -> {selected_prod_id}, {mac}) at {dev.get_log_label()}") - len(f"running Firmware v{device_data['firm_v']}")) # Align logging
                     + f"running Firmware v{device_data['firm_v']}, {firmware_label}: {result.latest_known_firmware}"
                 )
             else:
-                log.warning(f"No firmware entry found for product '{actual_prod_id}' (original) or suitable replacement.")
+                log.warning(f"[{dev.get_log_label()}] No firmware entry found for product '{actual_prod_id}' (original) or suitable replacement.")
                 result.firmware_status = f"No firmware definition for {actual_prod_id}"
 
             # continue here for status
@@ -1091,13 +1110,13 @@ def iterate_list(
 
             # deploy Firmware
             if skip_firmware_update:
-                log.info(f"[{ip}] Firmware update skipped by user request (No Update).")
+                log.info(f"[{dev.get_log_label()}] Firmware update skipped by user request (No Update).")
                 result.firmware_status = "Skipped (No Update)"
             elif selected_prod_id and selected_prod_id in _firmware: # Check if selected_prod_id is valid for _firmware
                 # Check for explicit no-update flag
                 target_filename = _firmware.get(selected_prod_id, 'filename', fallback='')
                 if target_filename == '__no_update__':
-                     log.info(f"[{ip}] Firmware update skipped by user request (No Update).")
+                     log.info(f"[{dev.get_log_label()}] Firmware update skipped by user request (No Update).")
                      result.firmware_status = "Skipped (No Update)"
                 else: 
                     try:
@@ -1112,25 +1131,25 @@ def iterate_list(
                         result.firmware_upload_notes = fw_update_result.get("upload_notes")
                     except ValueError as ve_fw: # Catches firmware file not found etc. from update_firmware
                         result.firmware_status = f"failed: {str(ve_fw)}"
-                        log.warning(f"Skipped firmware update for {ip}: {ve_fw}")
+                        log.warning(f"[{dev.get_log_label()}] Skipped firmware update: {ve_fw}")
                     except Exception as e_fw_update: # Catch any other unexpected error during update_firmware
                         result.firmware_status = f"failed: unexpected error during update ({str(e_fw_update)})"
-                        log.error(f"Unexpected error during firmware update for {ip}: {e_fw_update}", exc_info=True)
+                        log.error(f"[{dev.get_log_label()}] Unexpected error during firmware update: {e_fw_update}", exc_info=True)
 
             # Factory Reset Processing
             if factory_reset_requested:
-                log.info(f"[{ip}] Factory reset requested via custom config...")
+                log.info(f"[{dev.get_log_label()}] Factory reset requested via custom config...")
                 try:
                      if dev.factory_reset():
-                         log.info(f"[{ip}] Factory reset triggered successfully.")
+                         log.info(f"[{dev.get_log_label()}] Factory reset triggered successfully.")
                          result.firmware_status = "Factory Reset Triggered"
                          # Reset usually reboots the device, so we might want to skip further configuration
                          # But we continue to let valid flow happen if possible, though config upload likely moot
                      else:
-                        log.warning(f"[{ip}] Factory reset returned False (maybe not supported or failed).")
+                        log.warning(f"[{dev.get_log_label()}] Factory reset returned False (maybe not supported or failed).")
                         result.error_message = "Factory reset failed or not supported"
                 except Exception as e_reset:
-                     log.error(f"[{ip}] Factory reset failed: {e_reset}")
+                     log.error(f"[{dev.get_log_label()}] Factory reset failed: {e_reset}")
                      result.error_message = f"Factory reset failed: {e_reset}"
 
             # Deploy Configuration
@@ -1138,26 +1157,26 @@ def iterate_list(
             # Usually yes, unless user wants a specific config AFTER reset.
             # But the UI flow suggests either Reset OR Config, not both.
             if cfg_filename is not None and not factory_reset_requested:
-                log.debug(f"Attempting to upload configuration {cfg_filename} to {ip}...")
+                log.debug(f"[{dev.get_log_label()}] Attempting to upload configuration {cfg_filename}...")
                 try:
                     dev.upload_config(cfg_filename, _args.configip, show_progress_bar=use_progress_bar, progress_cb=emit)
-                    log.info(f"[{ip}] Successfully uploaded configuration {cfg_filename}.")
+                    log.info(f"[{dev.get_log_label()}] Successfully uploaded configuration {cfg_filename}.")
                     append_status_note(f"Config updated ({cfg_filename})")
                 except Exception as e_cfg:
-                    log.error(f"Failed to upload configuration {cfg_filename} to {ip}: {e_cfg}")
+                    log.error(f"[{dev.get_log_label()}] Failed to upload configuration {cfg_filename}: {e_cfg}")
                     if result.error_message: result.error_message += f"; Config upload error: {e_cfg}"
                     else: result.error_message = f"Config upload error: {e_cfg}"
 
 
             # Deploy SSL certificate
             if ssl_cert_filename is not None:
-                log.debug(f"Attempting to upload SSL certificate {ssl_cert_filename} to {ip}...")
+                log.debug(f"[{dev.get_log_label()}] Attempting to upload SSL certificate {ssl_cert_filename}...")
                 try:
                     dev.upload_ssl_certificate(ssl_cert_filename, show_progress_bar=use_progress_bar, progress_cb=emit)
-                    log.info(f"[{ip}] Successfully uploaded SSL certificate {ssl_cert_filename}.")
+                    log.info(f"[{dev.get_log_label()}] Successfully uploaded SSL certificate {ssl_cert_filename}.")
                     append_status_note(f"SSL certificate updated ({ssl_cert_filename})")
                 except Exception as e_ssl:
-                    log.error(f"Failed to upload SSL certificate {ssl_cert_filename} to {ip}: {e_ssl}")
+                    log.error(f"[{dev.get_log_label()}] Failed to upload SSL certificate {ssl_cert_filename}: {e_ssl}")
                     if result.error_message: result.error_message += f"; SSL cert upload error: {e_ssl}"
                     else: result.error_message = f"SSL cert upload error: {e_ssl}"
 
@@ -1165,7 +1184,7 @@ def iterate_list(
             try:
                 final_ipv4_config = dev.http_get_config_json(dev.JSON_CONFIG_IP)['ipv4']
                 final_misc_status = dev.http_get_status_json(DeployDev.JSON_STATUS_MISC)['misc']
-                log.info(f"[{ip}] Device {dev.host} (final check) has hostname '{final_ipv4_config['hostname']}' and FW Version {final_misc_status['firm_v']}")
+                log.info(f"[{dev.get_log_label()}] Final check: hostname '{final_ipv4_config['hostname']}', FW Version {final_misc_status['firm_v']}")
                 # Update final_firmware if it changed due to config/ssl reboot and wasn't from fw update
                 if result.final_firmware == result.initial_firmware or result.final_firmware is None: # only if not set by fw update
                     if final_misc_status['firm_v'] != result.initial_firmware:
@@ -1176,20 +1195,21 @@ def iterate_list(
 
 
             except Exception as e_final_check:
-                log.warning(f"Could not perform final status check for {dev.host}: {e_final_check}")
+                log.warning(f"[{dev.get_log_label()}] Could not perform final status check: {e_final_check}")
 
             # Overall success for the device if no major error message was set earlier
             if not result.error_message:
                  result.success = True # Mark as success if no critical errors were logged to result.error_message
 
         except Exception as e: # Catch-all for the processing of a single device
-            log.error(f"Major error processing device {ip}: {e}", exc_info=True)
+            log.error(f"[{format_device_log_label(ip, job_id=job_id)}] Major error processing device: {e}", exc_info=True)
             result.error_message = str(e)
             result.success = False # Ensure success is false on major error
 
         emit({
             "type": "device_done",
             "ip": ip,
+            "job_id": job_id,
             "ok": result.success,
             "product": result.product_name,
             "initial_fw": result.initial_firmware,
@@ -1212,7 +1232,18 @@ def iterate_list(
                 results.append(fut.result())
             except Exception as e:
                 ip_obj = future_map[fut]
-                results.append(DeviceResult(ip=str(ip_obj), product_name="unknown", mac="unknown", initial_firmware="unknown", success=False, error_message=str(e)))
+                ip_key = str(ip_obj)
+                results.append(
+                    DeviceResult(
+                        ip=ip_key,
+                        product_name="unknown",
+                        mac="unknown",
+                        initial_firmware="unknown",
+                        success=False,
+                        error_message=str(e),
+                        job_id=job_id_map.get(ip_key) if show_job_id else None,
+                    )
+                )
     return results
 
 
@@ -1283,8 +1314,14 @@ def main() -> None:
     log.info("-" * 80)
     for res_item in processing_results:
         status_char = "✓" if res_item.success else "✗"
+        summary_endpoint = format_device_log_label(
+            res_item.conn_host or res_item.ip,
+            res_item.conn_port,
+            bool(res_item.conn_ssl),
+            res_item.job_id,
+        )
         device_info = [
-            f"{status_char} {res_item.ip}",
+            f"{status_char} {summary_endpoint}",
             f"{res_item.product_name}",
             f"{res_item.mac}"
         ]

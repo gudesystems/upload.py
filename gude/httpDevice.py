@@ -15,9 +15,17 @@ log.setLevel(logging.getLevelName('INFO'))
 
 class HttpDevice(DeviceValues):
 
+    def get_log_label(self):
+        use_ssl = bool(self.httpOpts.get("ssl"))
+        default_port = 443 if use_ssl else 80
+        port = self.httpOpts.get("port", default_port)
+        endpoint = f"{self.host}:{port}" if port != default_port else self.host
+        job_id = getattr(self, "log_job_id", None)
+        return f"{job_id} {endpoint}" if job_id else endpoint
+
     def get_cgi_cmd_param_defaults(self, cmd, extra_params=None):
         if cmd in self.CGI_CMD_JSON_MAP:
-            params = self.CGI_CMD_JSON_MAP[cmd]
+            params = dict(self.CGI_CMD_JSON_MAP[cmd])
             params.update({"cmd": cmd})
             if extra_params is not None:
                 params.update(extra_params)
@@ -77,6 +85,9 @@ class HttpDevice(DeviceValues):
 
     def set_req_headers(self, req_headers=None):
         self.req_headers = req_headers
+
+    def set_log_job_id(self, job_id=None):
+        self.log_job_id = job_id
 
     def http_get(self, filename, cgi_get_params=None, req_headers=None):
         url = self.get_http_url(filename)
@@ -248,7 +259,7 @@ class HttpDevice(DeviceValues):
                 print_progress_bar(i, total, fill='#', clear=' ', unit='seconds')
             else:
                 if i % 5 == 0:
-                    log.info(f"[{self.host}] Rebooting... {i}/{total} seconds")
+                    log.info(f"[{self.get_log_label()}] Rebooting... {i}/{total} seconds")
             time.sleep(1)
         retries = max_wait_secs
         while retries:
@@ -256,7 +267,7 @@ class HttpDevice(DeviceValues):
                 if show_progress_bar:
                     print_progress_bar(total, total, fill='#', clear=' ', unit='seconds',
                                        actual=int(pre_wait_secs) + max_wait_secs - retries)
-                log.info(f"[{self.host}] {self.host}:{self.httpOpts['port']} up")
+                log.info(f"[{self.get_log_label()}] Device reachable")
                 time.sleep(1)
                 return True
             else:
@@ -273,9 +284,9 @@ class HttpDevice(DeviceValues):
                                        unit='seconds')
                 else:
                     if current_sec % 5 == 0:
-                        log.info(f"[{self.host}] Rebooting... {current_sec}/{total} seconds")
+                        log.info(f"[{self.get_log_label()}] Rebooting... {current_sec}/{total} seconds")
 
-        log.error(f"[{self.host}] ERROR: no reply, giving up")
+        log.error(f"[{self.get_log_label()}] ERROR: no reply, giving up")
         return False
 
     def reboot_cmd(self, cmd, wait_reboot=False, max_wait_secs=20.0, req_headers=None, show_progress_bar=True, progress_cb=None):
@@ -289,7 +300,7 @@ class HttpDevice(DeviceValues):
     # reboot device to Fab Defaults
     #
     def reboot_fab(self, wait_reboot=True, show_progress_bar=True, progress_cb=None):
-        log.info(f"[{self.host}] Reboot to FabSettings...")
+        log.info(f"[{self.get_log_label()}] Reboot to FabSettings...")
         self.flush_config_buffer()
         ret = self.reboot_cmd(self.CGI_CMD_RESET_TO_FAB, wait_reboot, show_progress_bar=show_progress_bar, progress_cb=progress_cb)
         return ret
@@ -298,7 +309,7 @@ class HttpDevice(DeviceValues):
     # reboot device
     #
     def reboot(self, wait_reboot=True, max_wait_secs=20, show_progress_bar=True, progress_cb=None):
-        log.info(f"[{self.host}] Rebooting...")
+        log.info(f"[{self.get_log_label()}] Rebooting...")
         self.flush_config_buffer()
         ret = self.reboot_cmd(self.CGI_CMD_RESET, wait_reboot, max_wait_secs, show_progress_bar=show_progress_bar, progress_cb=progress_cb)
         return ret
@@ -344,7 +355,7 @@ class HttpDevice(DeviceValues):
         cgi = {'id': typ, 'idx': idx, 'context': context, 'pipe': pipe}
         if extra is not None:
             cgi['extra'] = extra
-        log.info(f"[{self.host}] Trigger test event {typ}.{idx} context({context}) pipe({pipe}) extra({extra})")
+        log.info(f"[{self.get_log_label()}] Trigger test event {typ}.{idx} context({context}) pipe({pipe}) extra({extra})")
         return self.http_cgi_json_cmd(HttpDevice.CGI_CMD_TEST_EVENT_MSG, cgi, req_headers)
 
     def export_config(self, req_headers=None):
@@ -388,6 +399,20 @@ class HttpDevice(DeviceValues):
 
     def __init__(self, host, req_headers=None):
         self.host = host
+        self.log_job_id = None
+        self.httpOpts = {
+            "ssl": False,
+            "port": 80,
+            "basicauth": False,
+            "sessionauth": False,
+            "username": "admin",
+            "password": "admin",
+        }
+        self.lastGetReq = {
+            "time": None,
+            "url": None,
+            "code": None,
+        }
         self.req_headers = req_headers
         self.allConfigJson = None
         self.allStatusJson = None
