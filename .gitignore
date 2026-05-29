@@ -174,3 +174,12 @@ SESSION_HANDOVER.md
 2025-10-1_log
 2025-06-10_log.txt
 config/costum_192.168.210.192_config.txt
+
+# Local/private working files
+.private/
+/*.cer
+/*.pem
+/*_rg_*_log_*.txt
+/git_rebase_and_sqash.txt
+/uploa_old.ini
+config/set_label_*.txt
