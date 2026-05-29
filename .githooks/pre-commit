@@ -1,0 +1,31 @@
+#!/bin/sh
+# Reject staged text files that contain CRLF line endings.
+
+bad_files=""
+tmp_file="$(mktemp)"
+git diff --cached --name-only --diff-filter=ACM > "$tmp_file"
+
+while IFS= read -r file; do
+    [ -z "$file" ] && continue
+
+    # Skip binary files (numstat uses "-" for binary add/delete counts).
+    stats="$(git diff --cached --numstat -- "$file" | head -n 1)"
+    added="$(printf "%s" "$stats" | awk '{print $1}')"
+    if [ "$added" = "-" ]; then
+        continue
+    fi
+
+    if git show ":$file" | LC_ALL=C grep -q "$(printf '\r')"; then
+        bad_files="${bad_files}\n${file}"
+    fi
+done < "$tmp_file"
+
+rm -f "$tmp_file"
+
+if [ -n "$bad_files" ]; then
+    printf "ERROR: CRLF line endings detected in staged files:\n%b\n" "$bad_files" >&2
+    printf "Please normalize to LF before committing.\n" >&2
+    exit 1
+fi
+
+exit 0

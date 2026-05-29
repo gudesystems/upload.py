@@ -1,1 +1,0 @@
-tools\python\python.exe upload.py

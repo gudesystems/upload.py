@@ -1,4 +1,13 @@
 fw/*.bin
+*.xlsx
+*.bak
+*.png
+!screenshots/
+!screenshots/sample_fw-selection.png
+!screenshots/sample_list_change-deselect_192.168.2.80.png
+!screenshots/sample_confirm-update-changes_model.png
+test*.py
+test*.ini
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -33,7 +42,6 @@ MANIFEST
 #  Usually these files are written by a python script from a template
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
-*.spec
 
 # Installer logs
 pip-log.txt
@@ -75,6 +83,9 @@ docs/_build/
 
 # PyBuilder
 target/
+
+# build
+latest-builds-debugjson/
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -129,3 +140,46 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+24-11-20_log.txt
+error_25.05.23.txt
+test.ini
+.vscode/launch.json
+tests/
+!tests/
+tests/*
+!tests/test_firmware_target.py
+tools/
+gude/_unnecessary_work.py
+gude/version.offline.ini
+.idea/
+pf.py
+pf.bak.py
+.vscode/
+GudeNWTabelle/
+tools/
+26.08.2025_status_oai.txt
+3_icons.html
+gude-upload-0.0.1-dev.txt
+gude-upload-0.0.2-dev.txt
+new_error.txt
+run_upload.bat
+*.ico
+!gude/gude.ico
+gude/gude_only-logo.ico
+gude/gude_only-logo_sw.ico
+
+# unused assets
+GudeNWTabelleOutlets/
+SESSION_HANDOVER.md
+2025-10-1_log
+2025-06-10_log.txt
+config/costum_192.168.210.192_config.txt
+
+# Local/private working files
+.private/
+/*.cer
+/*.pem
+/*_rg_*_log_*.txt
+/git_rebase_and_sqash.txt
+/uploa_old.ini
+config/set_label_*.txt

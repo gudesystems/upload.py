@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 import argparse
 import configparser
 import requests
@@ -11,14 +11,21 @@ firmware = configparser.ConfigParser(strict=False)
 firmware.read(args.version_ini)
 
 basepath = 'https://files.gude-systems.com/fw/gude'
+basepath_overwrite = False
 latest = {}
+
+if firmware.has_section('url') and firmware.has_option('url', 'basepath'):
+    basepath = firmware['url']['basepath']
+    basepath_overwrite = True
 
 for devClass in firmware.sections():
     for (key, val) in firmware.items(devClass):
-        if key == 'basepath':
-            basepath = val
         if key == 'json':
-            url = f"{basepath}/{val}"
+            # check if subpath is used
+            if basepath_overwrite and firmware.has_option(devClass, 'subpath'):
+                url = f"{basepath}/{firmware[devClass]['subpath']}/{val}"
+            else:
+                url = f"{basepath}/{val}"
             print(f"downloading {url}")
             latest[devClass] = requests.get(url).json()[0]['version']
 
@@ -27,7 +34,11 @@ for (devClass, version) in latest.items():
 
     # download FW
     filename = firmware[devClass]['filename'].replace('{version}', version)
-    url = f"{basepath}/{filename}"
+    # check if subpath is used
+    if basepath_overwrite and firmware.has_option(devClass, 'subpath'):
+        url = f"{basepath}/{firmware[devClass]['subpath']}/{filename}"
+    else:
+        url = f"{basepath}/{filename}"
     print(f"downloading {url}")
     r = requests.get(url)
     if r.status_code == 200:

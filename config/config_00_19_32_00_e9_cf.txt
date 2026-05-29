@@ -1,0 +1,3 @@
+# download config.txt from device, or insert custom CLI commands here
+
+port 1 label set "HelloWorld"

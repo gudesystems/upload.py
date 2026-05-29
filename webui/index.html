@@ -1,0 +1,2024 @@
+<!DOCTYPE html>
+<html data-bs-theme="light" lang="en-US" dir="ltr">
+
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gude Devices</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/gude_only-logo.svg">
+  <link href="/assets/dataTables.bootstrap5.min.css" rel="stylesheet" />
+  <link href="/assets/simplebar.min.css" rel="stylesheet" />
+  <link href="/assets/theme.min.css" rel="stylesheet" id="style-default" />
+  <link href="/assets/user.min.css" rel="stylesheet" id="user-style-default" />
+  <script src="/assets/config.js"></script>
+  <style>
+    .logo {
+      background-image: url('/assets/gude.svg');
+      background-repeat: no-repeat;
+      background-position: left center;
+      background-size: contain;
+    }
+
+    .nav-link-icon svg {
+      width: 18px;
+      height: 18px;
+      display: inline-block;
+    }
+
+    html.navbar-vertical-collapsed .sidebar-meta {
+      display: none !important;
+    }
+
+    /* Top/Bottom rows spacing and alignment */
+    .dataTables_wrapper .dt-top {
+      margin-bottom: .75rem !important;
+    }
+
+    .dataTables_wrapper .dt-bottom {
+      margin-top: .75rem !important;
+      align-items: center;
+    }
+
+    /* Align DataTables filter row content and unify control heights */
+    div.dataTables_wrapper div.dataTables_filter {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      /* filter on the left */
+      gap: .5rem;
+      /* even spacing between input and buttons */
+    }
+
+    div.dataTables_wrapper div.dataTables_filter label {
+      margin: 0;
+    }
+
+    /* Match button height to search input for visual alignment */
+    div.dataTables_wrapper div.dataTables_filter input[type="search"] {
+      height: 32px;
+    }
+
+    .dt-toolbar-btn {
+      height: 32px;
+      padding: .125rem .5rem;
+      /* tight vertical, comfy horizontal */
+      display: inline-flex;
+      align-items: center;
+      white-space: nowrap;
+      /* prevent label wrapping */
+      flex: 0 0 auto;
+      /* do not shrink and force line-breaks */
+    }
+
+    .dt-top-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: .5rem;
+    }
+
+    /* Spinner */
+    .spinner {
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #3498db;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      animation: spin 1s linear infinite;
+      display: none;
+    }
+
+    @keyframes spin {
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+
+    .spinner.visible {
+      display: inline-block;
+    }
+
+    .draft-banner {
+      display: none;
+    }
+
+    .draft-banner.show {
+      display: block;
+    }
+
+    .host-preview-list {
+      max-height: 240px;
+      overflow: auto;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: .8rem;
+      white-space: pre;
+    }
+
+    .nav-link-disabled {
+      pointer-events: none;
+      cursor: default;
+      opacity: .45;
+    }
+
+  </style>
+</head>
+
+<body>
+  <main class="main" id="top">
+    <!-- Add Device Modal -->
+    <div class="modal fade" id="addDeviceModal" tabindex="-1" aria-labelledby="addDeviceModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="addDeviceModalLabel">Add New Device</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <form id="addDeviceForm">
+              <div class="alert alert-info py-2" role="alert">
+                New entries are added to the current device list only. They are written to <code>upload.ini</code> after you apply changes.
+              </div>
+              <div class="mb-3">
+                <label for="newDevIp" class="form-label">IP Address / Hostname</label>
+                <input type="text" class="form-control" id="newDevIp" required placeholder="192.168.x.x or hostname">
+              </div>
+              <div class="mb-3">
+                <label for="newDevPort" class="form-label">Port (Optional)</label>
+                <input type="number" class="form-control" id="newDevPort" placeholder="80">
+              </div>
+              <div class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" id="newDevSsl">
+                <label class="form-check-label" for="newDevSsl">Use SSL</label>
+              </div>
+              <div class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" id="newDevAuth">
+                <label class="form-check-label" for="newDevAuth">Use Authentication</label>
+              </div>
+              <div id="authFields" style="display:none;">
+                <div class="mb-3">
+                  <label for="newDevUser" class="form-label">Username</label>
+                  <input type="text" class="form-control" id="newDevUser">
+                </div>
+                <div class="mb-3">
+                  <label for="newDevPass" class="form-label">Password</label>
+                  <input type="password" class="form-control" id="newDevPass">
+                </div>
+              </div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button type="button" class="btn btn-primary" onclick="submitNewDevice()">Add to Current device list</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Update Confirmation Modal -->
+    <div class="modal fade" id="updateConfirmModal" tabindex="-1" aria-labelledby="updateConfirmModalLabel"
+      aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="updateConfirmModalLabel">Confirm Update</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <p>Are you sure you want to update the following devices?</p>
+            <div class="form-check mb-3">
+              <input class="form-check-input" type="checkbox" id="updateConfirmForceFw">
+              <label class="form-check-label" for="updateConfirmForceFw">
+                Force firmware update (upload even if device is already up to date)
+              </label>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-sm table-striped user-select-none">
+                <thead>
+                  <tr>
+                    <th>IP / Host</th>
+                    <th>Firmware</th>
+                    <th>Config</th>
+                    <th>SSL</th>
+                  </tr>
+                </thead>
+                <tbody id="updateConfirmTableBody">
+                  <!-- JS populates this -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-primary" onclick="finalizeUpdate()">Confirm & Update</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Import Preview Modal -->
+    <div class="modal fade" id="importPreviewModal" tabindex="-1" aria-labelledby="importPreviewModalLabel"
+      aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="importPreviewModalLabel">Import Device List (Current device list)</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <p class="mb-2" id="importPreviewSummary"></p>
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="radio" name="importMode" id="importModeMerge" value="merge"
+                checked>
+              <label class="form-check-label" for="importModeMerge">Merge into current device list selection</label>
+            </div>
+            <div class="form-check mb-3">
+              <input class="form-check-input" type="radio" name="importMode" id="importModeReplace" value="replace">
+              <label class="form-check-label" for="importModeReplace">Replace current device list selection</label>
+            </div>
+            <div class="border rounded bg-body-tertiary p-2 host-preview-list" id="importPreviewHosts"></div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-primary" onclick="applyImportToDraft()">Apply to Current device list</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Export Options Modal -->
+    <div class="modal fade" id="exportOptionsModal" tabindex="-1" aria-labelledby="exportOptionsModalLabel"
+      aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="exportOptionsModalLabel">Export Device List</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="radio" name="exportMode" id="exportModeDraftSelection"
+                value="draft_selection" checked>
+              <label class="form-check-label" for="exportModeDraftSelection" id="exportModeDraftSelectionLabel">
+                Current selection (0)
+              </label>
+            </div>
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="radio" name="exportMode" id="exportModeDraftAll"
+                value="draft_all">
+              <label class="form-check-label" for="exportModeDraftAll" id="exportModeDraftAllLabel">
+                All items in list (0)
+              </label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="exportMode" id="exportModeUploadIni"
+                value="upload_ini">
+              <label class="form-check-label" for="exportModeUploadIni" id="exportModeUploadIniLabel">
+                All saved items in upload.ini (0)
+              </label>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-primary" onclick="finalizeExport()">Export</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="container" data-layout="container">
+      <script>
+        var isFluid = JSON.parse(localStorage.getItem('isFluid'));
+        if (isFluid) {
+          var container = document.querySelector('[data-layout]');
+          container.classList.remove('container');
+          container.classList.add('container-fluid');
+        }
+      </script>
+
+      <nav class="navbar navbar-light navbar-vertical navbar-expand-xl navbar-inverted">
+        <div class="d-flex align-items-center">
+          <div class="toggle-icon-wrapper">
+            <button class="btn navbar-toggler-humburger-icon navbar-vertical-toggle" aria-label="Toggle Navigation">
+              <span class="navbar-toggle-icon"><span class="toggle-line"></span></span>
+            </button>
+          </div>
+          <a class="navbar-brand" href="#" style="width:100%">
+            <div class="d-flex align-items-center py-3 navbar-brand-top-height" style="width:148px;">
+              <div class="logo"></div>
+            </div>
+          </a>
+        </div>
+        <div class="collapse navbar-collapse show" id="navbarVerticalCollapse">
+          <div class="navbar-vertical-content scrollbar">
+            <ul class="navbar-nav flex-column mb-3" id="navbarVerticalNav">
+              <li class="nav-item">
+                <a class="nav-link active" href="#" role="button">
+                  <div class="d-flex align-items-center">
+                    <span class="nav-link-icon">
+                      <svg class="svg-h-9 svg-align-text fas" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+                        <path fill="currentColor"
+                          d="M464 32H48C21.49 32 0 53.49 0 80v352c0 26.51 21.49 48 48 48h416c26.51 0 48-21.49 48-48V80c0-26.51-21.49-48-48-48zM224 416H64v-96h160v96zm0-160H64v-96h160v96zm224 160H288v-96h160v96zm0-160H288v-96h160v96z">
+                        </path>
+                      </svg>
+                    </span>
+                    <span class="nav-link-text ps-1">Devices</span>
+                  </div>
+                </a>
+              </li>
+              <li class="nav-item">
+                <div class="row navbar-vertical-label-wrapper mt-3 mb-2">
+                  <div class="col-auto navbar-vertical-label fw-bold">Support</div>
+                  <div class="col ps-0">
+                    <hr class="mb-0 navbar-vertical-divider">
+                  </div>
+                </div>
+                <a class="nav-link" href="https://github.com/gudesystems/upload.py" target="_blank" rel="noopener"
+                  role="button">
+                  <div class="d-flex align-items-center">
+                    <span class="nav-link-icon">
+                      <svg class="svg-h-9 svg-align-text fas" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512">
+                        <path fill="currentColor"
+                          d="M320 32C193 32 96 129 96 256c0 99.9 64.5 184.4 154 214.3 11.3 2.1 15.5-4.9 15.5-10.9 0-5.4-.2-23.1-.3-41.9-62.7 13.6-75.9-26.3-75.9-26.3-10.3-26.2-25.1-33.2-25.1-33.2-20.5-14 1.6-13.7 1.6-13.7 22.7 1.6 34.6 23.3 34.6 23.3 20.1 34.5 52.7 24.5 65.6 18.7 2-14.6 7.9-24.5 14.3-30.1-50-5.7-102.6-25-102.6-111.3 0-24.6 8.8-44.6 23.2-60.3-2.3-5.7-10.1-28.6 2.2-59.6 0 0 19-6.1 62.4 23 18.1-5 37.5-7.5 56.9-7.6 19.3.1 38.8 2.6 56.9 7.6 43.4-29.1 62.4-23 62.4-23 12.3 31 4.5 53.9 2.2 59.6 14.4 15.7 23.2 35.7 23.2 60.3 0 86.5-52.7 105.5-102.9 111 8.1 7 15.4 20.6 15.4 41.5 0 29.9-.3 54-.3 61.3 0 6 4.1 13.1 15.6 10.9C479.5 440.4 544 355.9 544 256 544 129 447 32 320 32z" />
+                      </svg>
+                    </span>
+                    <span class="nav-link-text ps-1">Online doc</span>
+                  </div>
+                </a>
+                <a class="nav-link" href="https://github.com/gudesystems/upload.py/issues" target="_blank"
+                  rel="noopener" role="button">
+                  <div class="d-flex align-items-center">
+                    <span class="nav-link-icon">
+                      <svg class="svg-h-9 svg-align-text fas" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+                        <path fill="currentColor"
+                          d="M256 8C119 8 8 119 8 256s111 248 248 248 248-111 248-248S393 8 256 8zm0 110c23.2 0 42 18.8 42 42s-18.8 42-42 42-42-18.8-42-42 18.8-42 42-42zm56 272c0 6.6-5.4 12-12 12H212c-6.6 0-12-5.4-12-12v-24c0-6.6 5.4-12 12-12h12v-64h-12c-6.6 0-12-5.4-12-12v-24c0-6.6 5.4-12 12-12h72c6.6 0 12 5.4 12 12v100h12c6.6 0 12 5.4 12 12v24z" />
+                      </svg>
+                    </span>
+                    <span class="nav-link-text ps-1">Issues</span>
+                  </div>
+                </a>
+              </li>
+              <li class="nav-item mt-3 px-3 sidebar-meta">
+                <div class="fs-10 text-700">Product: Gude Upload</div>
+                <div class="fs-10 text-700">Version: 0.0.4-dev</div>
+                <div class="fs-10 text-600">© Gude Systems</div>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </nav>
+
+      <div class="content">
+        <!-- Top navbar with actions aligned with content -->
+        <nav class="navbar navbar-light navbar-glass navbar-top navbar-expand">
+          <div class="search-box d-none d-md-block" style="visibility:hidden"></div>
+          <ul class="navbar-nav navbar-nav-icons ms-auto flex-row align-items-center">
+            <li class="nav-item ps-2 pe-0" data-bs-tooltip="tooltip" data-bs-placement="left"
+              data-bs-original-title="Switch Theme">
+              <div class="dropdown theme-control-dropdown"><a
+                  class="nav-link d-flex align-items-center dropdown-toggle fs-9 pe-1 py-0" href="#" role="button"
+                  id="themeSwitchDropdown" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false"><span
+                    data-theme-dropdown-toggle-icon="light" class=""><svg class="fas svg-h-7" aria-hidden="true"
+                      focusable="false" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+                      <path fill="currentColor"
+                        d="M256 160c-52.9 0-96 43.1-96 96s43.1 96 96 96 96-43.1 96-96-43.1-96-96-96zm246.4 80.5l-94.7-47.3 33.5-100.4c4.5-13.6-8.4-26.5-21.9-21.9l-100.4 33.5-47.4-94.8c-6.4-12.8-24.6-12.8-31 0l-47.3 94.7L92.7 70.8c-13.6-4.5-26.5 8.4-21.9 21.9l33.5 100.4-94.7 47.4c-12.8 6.4-12.8 24.6 0 31l94.7 47.3-33.5 100.5c-4.5 13.6 8.4 26.5 21.9 21.9l100.4-33.5 47.3 94.7c6.4 12.8 24.6 12.8 31 0l47.3-94.7 100.4 33.5c13.6 4.5 26.5-8.4 21.9-21.9l-33.5-100.4 94.7-47.3c13-6.5 13-24.7.2-31.1zm-155.9 106c-49.9 49.9-131.1 49.9-181 0-49.9-49.9-49.9-131.1 0-181 49.9-49.9 131.1-49.9 181 0 49.9 49.9 49.9 131.1 0 181z">
+                      </path>
+                    </svg></span><span data-theme-dropdown-toggle-icon="dark" class="d-none"><svg class="fas svg-h-8"
+                      focusable="false" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"
+                      aria-hidden="false">
+                      <path fill="currentColor"
+                        d="M283.211 512c78.962 0 151.079-35.925 198.857-94.792 7.068-8.708-.639-21.43-11.562-19.35-124.203 23.654-238.262-71.576-238.262-196.954 0-72.222 38.662-138.635 101.498-174.394 9.686-5.512 7.25-20.197-3.756-22.23A258.156 258.156 0 0 0 283.211 0c-141.309 0-256 114.511-256 256 0 141.309 114.511 256 256 256z">
+                      </path>
+                    </svg></span><span data-theme-dropdown-toggle-icon="auto" class="d-none"><svg class="fas svg-h-7"
+                      aria-hidden="true" focusable="false" role="img" xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 512 512">
+                      <path fill="currentColor"
+                        d="M8 256c0 136.966 111.033 248 248 248s248-111.034 248-248S392.966 8 256 8 8 119.033 8 256zm248 184V72c101.705 0 184 82.311 184 184 0 101.705-82.311 184-184 184z">
+                      </path>
+                    </svg></span></a>
+                <div class="dropdown-menu dropdown-menu-end dropdown-caret border py-0 mt-3"
+                  aria-labelledby="themeSwitchDropdown">
+                  <div class="bg-white dark__bg-1000 rounded-2 py-2"><button
+                      class="dropdown-item d-flex align-items-center gap-2 active" type="button" value="light"
+                      data-theme-control="theme"><svg class="fas svg-h-10" aria-hidden="true" focusable="false"
+                        role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+                        <path fill="currentColor"
+                          d="M256 160c-52.9 0-96 43.1-96 96s43.1 96 96 96 96-43.1 96-96-43.1-96-96-96zm246.4 80.5l-94.7-47.3 33.5-100.4c4.5-13.6-8.4-26.5-21.9-21.9l-100.4 33.5-47.4-94.8c-6.4-12.8-24.6-12.8-31 0l-47.3 94.7L92.7 70.8c-13.6-4.5-26.5 8.4-21.9 21.9l33.5 100.4-94.7 47.4c-12.8 6.4-12.8 24.6 0 31l94.7 47.3-33.5 100.5c-4.5 13.6 8.4 26.5 21.9 21.9l100.4-33.5 47.3 94.7c6.4 12.8 24.6 12.8 31 0l47.3-94.7 100.4 33.5c13.6 4.5 26.5-8.4 21.9-21.9l-33.5-100.4 94.7-47.3c13-6.5 13-24.7.2-31.1zm-155.9 106c-49.9 49.9-131.1 49.9-181 0-49.9-49.9-49.9-131.1 0-181 49.9-49.9 131.1-49.9 181 0 49.9 49.9 49.9 131.1 0 181z">
+                        </path>
+                      </svg>Light<span class="fas fa-check dropdown-check-icon ms-auto text-600"></span></button><button
+                      class="dropdown-item d-flex align-items-center gap-2" type="button" value="dark"
+                      data-theme-control="theme"><svg class="fas svg-h-10" aria-hidden="true" focusable="false"
+                        role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+                        <path fill="currentColor"
+                          d="M283.211 512c78.962 0 151.079-35.925 198.857-94.792 7.068-8.708-.639-21.43-11.562-19.35-124.203 23.654-238.262-71.576-238.262-196.954 0-72.222 38.662-138.635 101.498-174.394 9.686-5.512 7.25-20.197-3.756-22.23A258.156 258.156 0 0 0 283.211 0c-141.309 0-256 114.511-256 256 0 141.309 114.511 256 256 256z">
+                        </path>
+                      </svg>Dark<span class="fas fa-check dropdown-check-icon ms-auto text-600"></span></button><button
+                      class="dropdown-item d-flex align-items-center gap-2" type="button" value="auto"
+                      data-theme-control="theme"><svg class="fas svg-h-10" aria-hidden="true" focusable="false"
+                        role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+                        <path fill="currentColor"
+                          d="M8 256c0 136.966 111.033 248 248 248s248-111.034 248-248S392.966 8 256 8 8 119.033 8 256zm248 184V72c101.705 0 184 82.311 184 184 0 101.705-82.311 184-184 184z">
+                        </path>
+                      </svg>Auto<span class="fas fa-check dropdown-check-icon ms-auto text-600"></span></button></div>
+                </div>
+              </div>
+            </li>
+            <li class="nav-item dropdown"><a class="nav-link px-0"
+                id="navbarDropdownNotification" role="button" data-bs-toggle="dropdown" aria-haspopup="true"
+                aria-expanded="false" data-hide-on-body-scroll="data-hide-on-body-scroll"><svg
+                  class="fas svg-h-7 mt2 me-1" aria-hidden="true" focusable="false" role="img"
+                  xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512">
+                  <path fill="currentColor"
+                    d="M224 512c35.32 0 63.97-28.65 63.97-64H160.03c0 35.35 28.65 64 63.97 64zm215.39-149.71c-19.32-20.76-55.47-51.99-55.47-154.29 0-77.7-54.48-139.9-127.94-155.16V32c0-17.67-14.32-32-31.98-32s-31.98 14.33-31.98 32v20.84C118.56 68.1 64.08 130.3 64.08 208c0 102.3-36.15 133.53-55.47 154.29-6 6.45-8.66 14.16-8.61 21.71.11 16.4 12.98 32 32.1 32h383.8c19.12 0 32-15.6 32.1-32 .05-7.55-2.61-15.27-8.61-21.71z">
+                  </path>
+                </svg></a>
+              <div
+                class="dropdown-menu dropdown-caret dropdown-menu-end dropdown-menu-card dropdown-menu-notification dropdown-caret-bg"
+                aria-labelledby="navbarDropdownNotification">
+                <div class="card card-notification shadow-none">
+                  <div class="card-header">
+                    <div class="row justify-content-between align-items-center">
+                      <div class="col-auto">
+                        <h6 class="card-header-title mb-0">Notifications / Alerts</h6>
+                      </div>
+                      <div class="col-auto ps-0 ps-sm-3"><a class="card-link fw-normal" href="#"
+                          id="markNotificationsRead">Mark all as read</a>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="scrollbar-overlay" style="max-height:19rem" data-simplebar>
+                    <div class="list-group list-group-flush fw-normal fs-10" id="notificationList">
+                      <div class="list-group-item text-600" id="notificationEmptyItem">No notifications yet</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </li>
+            <li class="nav-item"><a class="nav-link pe-0 nav-link-disabled disabled" id="navbarDropdownUser" href="#"
+                role="button" aria-disabled="true" tabindex="-1" onclick="return false;"
+                title="User profile (coming soon)"><svg class="fas svg-h-7"
+                  aria-hidden="true" focusable="false" role="img" xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 448 512">
+                  <path fill="currentColor"
+                    d="M224 256c70.7 0 128-57.3 128-128S294.7 0 224 0 96 57.3 96 128s57.3 128 128 128zm89.6 32h-11.8c-22 10.4-46.6 16-77.8 16-31.2 0-55.8-5.6-77.8-16h-11.8C57.3 288 0 345.3 0 416v32c0 35.3 28.7 64 64 64h320c35.3 0 64-28.7 64-64v-32c0-70.7-57.3-128-134.4-128z">
+                  </path>
+                </svg></a>
+            </li>
+          </ul>
+        </nav>
+        <div class="card mb-3">
+          <div class="card-header d-flex flex-between-center">
+            <h5 class="mb-0">Devices</h5>
+          </div>
+          <div id="draftBanner" class="alert alert-warning mx-3 mt-3 mb-0 py-2 draft-banner" role="alert">
+            <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2">
+              <div id="draftBannerText" class="mb-0">Unsaved changes</div>
+              <div class="btn-group btn-group-sm">
+                <button type="button" class="btn btn-warning" onclick="handleSaveIni()">Apply Device List</button>
+                <button type="button" class="btn btn-outline-secondary" onclick="discardDraftHosts()">Discard Current device list</button>
+              </div>
+            </div>
+            <details id="draftChangesDetails" class="mt-2">
+              <summary id="draftChangesSummary">Show changes</summary>
+              <div class="border rounded bg-body-tertiary p-2 host-preview-list mt-2" id="draftChangesPreview"></div>
+            </details>
+          </div>
+          <div class="bg-body-tertiary p-3 rounded-bottom-2">
+            <div class="table-responsive">
+              <table id="devicesTable" class="table table-striped mb-0">
+                <thead>
+                  <tr>
+                    <th style="width:1%; text-align:center;"><input type="checkbox" id="selectAll"
+                        aria-label="Select all" /></th>
+                    <th>Status</th>
+                    <th>Device Info</th>
+                    <th>Firmware Info</th>
+                    <th>Settings</th>
+                    <th>Notes</th>
+                    <th>Error</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Hidden file input for firmware upload -->
+        <input type="file" id="fwUploadInput" accept=".bin" style="display:none" />
+        <input type="file" id="cfgUploadInput" accept=".txt,.cfg,.ini,.json" style="display:none" />
+        <input type="file" id="sslUploadInput" accept=".pem" style="display:none" />
+        <input type="file" id="iniImportInput" accept=".ini,.txt" style="display:none" />
+
+      </div>
+    </div>
+  </main>
+
+  <script src="/assets/simplebar.min.js"></script>
+  <script src="/assets/jquery.min.js"></script>
+  <script src="/assets/popper.min.js"></script>
+  <script src="/assets/bootstrap.min.js"></script>
+  <script src="/assets/theme.min.js"></script>
+  <script src="/assets/jquery.dataTables.min.js"></script>
+  <script src="/assets/dataTables.bootstrap5.min.js"></script>
+  <script>
+    // Fallback wiring for theme dropdown (mirrors template behavior)
+    (function () {
+      function applyTheme(mode) {
+        localStorage.setItem('theme', mode);
+        var html = document.documentElement;
+        if (mode === 'auto') {
+          var mql = window.matchMedia('(prefers-color-scheme: dark)');
+          html.setAttribute('data-bs-theme', mql.matches ? 'dark' : 'light');
+        } else {
+          html.setAttribute('data-bs-theme', mode);
+        }
+        // Toggle active state in dropdown
+        document.querySelectorAll('[data-theme-control="theme"]').forEach(function (btn) {
+          btn.classList.toggle('active', btn.value === mode);
+        });
+        // Toggle dropdown icon
+        ['light', 'dark', 'auto'].forEach(function (k) {
+          var el = document.querySelector('[data-theme-dropdown-toggle-icon="' + k + '"]');
+          if (el) { el.classList.toggle('d-none', k !== mode); }
+        });
+      }
+      document.querySelectorAll('[data-theme-control="theme"]').forEach(function (btn) {
+        btn.addEventListener('click', function () { applyTheme(btn.value); });
+      });
+      // Initialize from store
+      applyTheme(localStorage.getItem('theme') || 'light');
+    })();
+    let table;
+    const selectedKeys = new Set();
+    let persistedHosts = new Set();
+    const draftHostSettings = {}; // host -> settings entered in Add Device dialog (draft only)
+    let pendingImportHosts = [];
+    let lastResults = [];
+
+    const firmwareOverrides = {}; // Map keys (IPs) to selected filename (or 'onlineupdate')
+    let availableFirmwareFiles = [];
+
+    const configOverrides = {}; // Map keys (IPs) to selected config filename (or 'RESET' or '')
+    let availableConfigFiles = [];
+
+    const sslOverrides = {};
+    let availableSslFiles = [];
+
+    const modelMap = {}; // Map key -> product/model string for grouping
+    const notificationItems = [];
+    const lastNoteByDevice = {};
+    let notificationUnreadCount = 0;
+    const notificationMaxItems = 200;
+    const UI_SESSION_PING_INTERVAL_MS = 15000;
+    let uiSessionId = '';
+    let uiSessionHeartbeatTimer = null;
+    let uiSessionClosed = false;
+
+    function normalizeHostKey(v) {
+      return String(v || '').trim();
+    }
+
+    function dedupeHosts(hosts) {
+      const out = [];
+      const seen = new Set();
+      (hosts || []).forEach(h => {
+        const key = normalizeHostKey(h);
+        if (!key || seen.has(key)) return;
+        seen.add(key);
+        out.push(key);
+      });
+      return out;
+    }
+
+    function escapeHtml(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function createUiSessionId() {
+      if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+        return window.crypto.randomUUID();
+      }
+      return `ui-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+
+    function uiSessionPayload() {
+      return JSON.stringify({ session_id: uiSessionId });
+    }
+
+    async function postUiSessionEvent(path, keepalive) {
+      if (!uiSessionId) return;
+      await fetch(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: uiSessionPayload(),
+        keepalive: !!keepalive
+      });
+    }
+
+    async function openUiSession() {
+      uiSessionId = createUiSessionId();
+      uiSessionClosed = false;
+      try {
+        await postUiSessionEvent('/api/session/open', true);
+      } catch (e) {
+        console.debug('UI session open failed', e);
+      }
+    }
+
+    async function pingUiSession() {
+      if (!uiSessionId || uiSessionClosed) return;
+      try {
+        await postUiSessionEvent('/api/session/ping', false);
+      } catch (e) {
+        console.debug('UI session ping failed', e);
+      }
+    }
+
+    function startUiSessionHeartbeat() {
+      if (uiSessionHeartbeatTimer) {
+        window.clearInterval(uiSessionHeartbeatTimer);
+      }
+      uiSessionHeartbeatTimer = window.setInterval(() => {
+        pingUiSession();
+      }, UI_SESSION_PING_INTERVAL_MS);
+    }
+
+    function closeUiSession() {
+      if (!uiSessionId || uiSessionClosed) return;
+      uiSessionClosed = true;
+
+      if (uiSessionHeartbeatTimer) {
+        window.clearInterval(uiSessionHeartbeatTimer);
+        uiSessionHeartbeatTimer = null;
+      }
+
+      const payload = uiSessionPayload();
+      try {
+        if (navigator.sendBeacon) {
+          navigator.sendBeacon('/api/session/close', new Blob([payload], { type: 'application/json' }));
+        } else {
+          fetch('/api/session/close', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: payload,
+            keepalive: true
+          }).catch(() => { });
+        }
+      } catch (e) {
+        console.debug('UI session close failed', e);
+      }
+    }
+
+    function formatNotificationTimestamp(value) {
+      const dt = (value instanceof Date) ? value : new Date(value);
+      return dt.toLocaleString();
+    }
+
+    function notificationDeviceLabel(r) {
+      const host = rowKey(r) || r.conn_host || r.ip || '-';
+      const displayName = normalizeHostKey(r.product_name || r.hostname || '');
+      return displayName ? `${host} (${displayName})` : host;
+    }
+
+    function renderNotifications() {
+      const list = document.getElementById('notificationList');
+      if (!list) return;
+
+      if (notificationItems.length === 0) {
+        list.innerHTML = '<div class="list-group-item text-600" id="notificationEmptyItem">No notifications yet</div>';
+      } else {
+        list.innerHTML = notificationItems.map(item => {
+          const unreadClass = item.unread ? 'notification-unread' : '';
+          return `
+            <div class="list-group-item">
+              <div class="notification notification-flush ${unreadClass}">
+                <div class="notification-body">
+                  <p class="mb-1"><strong>${escapeHtml(item.device)}</strong><br>${escapeHtml(item.note)}</p>
+                  <div class="fs-11 text-600">${escapeHtml(item.time)}</div>
+                </div>
+              </div>
+            </div>`;
+        }).join('');
+      }
+      updateNotificationIndicator();
+    }
+
+    function updateNotificationIndicator() {
+      const bell = document.getElementById('navbarDropdownNotification');
+      if (!bell) return;
+
+      const hasUnread = notificationUnreadCount > 0;
+      bell.classList.toggle('notification-indicator', hasUnread);
+      bell.classList.toggle('notification-indicator-primary', hasUnread);
+      bell.classList.toggle('notification-indicator-fill', hasUnread);
+    }
+
+    function isCompletedNotificationNote(noteText) {
+      const note = String(noteText || '').trim();
+      if (!note) return false;
+
+      const lower = note.toLowerCase();
+      if (lower === 'status only, no changes made') return false;
+      if (lower === 'uploading') return false;
+      if (lower === 'checking' || lower === 'checking...') return false;
+      if (lower.startsWith('uploading')) return false;
+      if (lower.startsWith('rebooting')) return false;
+      if (lower.startsWith('checking')) return false;
+      if (/%/.test(note) && /upload/i.test(note)) return false;
+
+      return true;
+    }
+
+    function addNotificationEntry(device, noteText) {
+      const note = String(noteText || '').trim();
+      if (!note) return;
+
+      notificationItems.unshift({
+        device: String(device || '-'),
+        note,
+        time: formatNotificationTimestamp(new Date()),
+        unread: true
+      });
+      if (notificationItems.length > notificationMaxItems) {
+        notificationItems.length = notificationMaxItems;
+      }
+      notificationUnreadCount += 1;
+      renderNotifications();
+    }
+
+    function markAllNotificationsRead(evt) {
+      if (evt) evt.preventDefault();
+      notificationUnreadCount = 0;
+      notificationItems.forEach(item => { item.unread = false; });
+      renderNotifications();
+    }
+
+    function captureNotifications(results) {
+      (results || []).forEach(r => {
+        const key = rowKey(r);
+        if (!key) return;
+
+        const noteText = String(r.firmware_status || r.firmware_upload_notes || '').trim();
+        if (!noteText) return;
+        if (!isCompletedNotificationNote(noteText)) return;
+        if (lastNoteByDevice[key] === noteText) return;
+
+        lastNoteByDevice[key] = noteText;
+        addNotificationEntry(notificationDeviceLabel(r), noteText);
+      });
+    }
+
+    function getAllDraftHosts() {
+      const fromResults = (lastResults || []).map(r => rowKey(r)).filter(Boolean);
+      return dedupeHosts([...Array.from(selectedKeys), ...fromResults]);
+    }
+
+    function parseHostsFromIniText(content) {
+      const hosts = [];
+      const lines = String(content || '').split(/\r?\n/);
+      let inHostsSection = false;
+
+      lines.forEach(raw => {
+        const line = raw.trim();
+        if (!line || line.startsWith(';') || line.startsWith('#')) return;
+
+        const sec = line.match(/^\[(.+)\]$/);
+        if (sec) {
+          inHostsSection = (sec[1] || '').trim().toLowerCase() === 'hosts';
+          return;
+        }
+        if (!inHostsSection) return;
+
+        const eq = line.indexOf('=');
+        const colon = line.indexOf(':');
+        let sep = eq;
+        if (sep < 0 || (colon >= 0 && colon < sep)) sep = colon;
+        if (sep <= 0) return;
+
+        const key = line.slice(0, sep).trim().toLowerCase();
+        let value = line.slice(sep + 1).trim();
+        value = value.replace(/\s[;#].*$/, '').trim();
+        if (!value) return;
+
+        if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+          value = value.slice(1, -1).trim();
+        }
+
+        if (key.startsWith('ip') || key.startsWith('net') || key === 'gbl') {
+          hosts.push(value);
+        }
+      });
+
+      return dedupeHosts(hosts);
+    }
+
+    function makeDraftPlaceholder(host) {
+      const isGblSearch = String(host).toLowerCase() === 'search';
+      return {
+        ip: host,
+        product_name: isGblSearch ? 'GBL Search Entry' : 'Current Device List Entry',
+        hostname: '',
+        mac: '',
+        initial_firmware: '',
+        latest_known_firmware: '',
+        latest_publish_date: '',
+        selected_prodid: '',
+        status_only: true,
+        final_firmware: '',
+        firmware_status: 'current device list entry (not queried)',
+        firmware_upload_notes: '',
+        success: true,
+        error_message: '',
+        conn_host: null,
+        conn_port: null,
+        conn_ssl: null,
+        url: null
+      };
+    }
+
+    function ensureResultsContainHosts(results, hosts) {
+      const out = Array.isArray(results) ? results.slice() : [];
+      const existing = new Set(out.map(r => rowKey(r)));
+      dedupeHosts(hosts).forEach(host => {
+        if (!existing.has(host)) {
+          out.push(makeDraftPlaceholder(host));
+          existing.add(host);
+        }
+      });
+      return out;
+    }
+
+    function getDraftHostChanges() {
+      const draft = new Set(Array.from(selectedKeys));
+      const added = Array.from(draft).filter(h => !persistedHosts.has(h));
+      const removed = Array.from(persistedHosts).filter(h => !draft.has(h));
+      return { added, removed };
+    }
+
+    function pruneDraftHostSettings(validHosts) {
+      const valid = new Set(validHosts || []);
+      Object.keys(draftHostSettings).forEach(k => {
+        if (!valid.has(k)) delete draftHostSettings[k];
+      });
+    }
+
+    function buildDraftChangeLines(added, removed) {
+      const lines = [];
+      added.slice().sort().forEach(h => lines.push(`+ ${h}`));
+      removed.slice().sort().forEach(h => lines.push(`- ${h}`));
+      return lines;
+    }
+
+    function updateDraftBanner() {
+      const banner = document.getElementById('draftBanner');
+      const text = document.getElementById('draftBannerText');
+      const details = document.getElementById('draftChangesDetails');
+      const detailsSummary = document.getElementById('draftChangesSummary');
+      const detailsPreview = document.getElementById('draftChangesPreview');
+      if (!banner || !text || !details || !detailsSummary || !detailsPreview) return;
+
+      const { added, removed } = getDraftHostChanges();
+      const dirty = added.length > 0 || removed.length > 0;
+
+      if (!dirty) {
+        banner.classList.remove('show');
+        text.textContent = '';
+        detailsSummary.textContent = 'Show changes';
+        detailsPreview.textContent = '';
+        details.open = false;
+        return;
+      }
+
+      const lines = buildDraftChangeLines(added, removed);
+      text.textContent = `Unsaved host-list changes: +${added.length} added, -${removed.length} removed.`;
+      detailsSummary.textContent = `Show changes (${lines.length})`;
+      detailsPreview.textContent = lines.join('\n');
+      banner.classList.add('show');
+    }
+
+    async function loadPersistedHostsFromDisk() {
+      try {
+        const res = await fetch('/api/export_ini', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hosts: [], export_all: true })
+        });
+        if (!res.ok) return;
+
+        const iniText = await res.text();
+        const hosts = parseHostsFromIniText(iniText);
+        persistedHosts = new Set(hosts);
+        selectedKeys.clear();
+        hosts.forEach(h => selectedKeys.add(h));
+        pruneDraftHostSettings(hosts);
+        updateDraftBanner();
+      } catch (e) {
+        console.error('Failed to load host list from upload.ini', e);
+      }
+    }
+
+    function showImportPreview(hosts, filename) {
+      pendingImportHosts = dedupeHosts(hosts);
+      const draftCount = selectedKeys.size;
+      const mergeSet = new Set([...Array.from(selectedKeys), ...pendingImportHosts]);
+      const summary = document.getElementById('importPreviewSummary');
+      const hostBox = document.getElementById('importPreviewHosts');
+      const mergeRadio = document.getElementById('importModeMerge');
+      if (mergeRadio) mergeRadio.checked = true;
+
+      if (summary) {
+        summary.textContent =
+          `File: ${filename} | Imported hosts: ${pendingImportHosts.length} | ` +
+          `Current device list now: ${draftCount} | Current device list after merge: ${mergeSet.size}`;
+      }
+      if (hostBox) {
+        hostBox.textContent = pendingImportHosts.join('\n');
+      }
+
+      const modalEl = document.getElementById('importPreviewModal');
+      const modal = new bootstrap.Modal(modalEl, {});
+      modal.show();
+    }
+
+    function showExportOptions() {
+      const selectedCount = selectedKeys.size;
+      const allDraftHosts = getAllDraftHosts();
+      const allDraftCount = allDraftHosts.length;
+      const draftSelLabel = document.getElementById('exportModeDraftSelectionLabel');
+      const draftAllLabel = document.getElementById('exportModeDraftAllLabel');
+      const uploadIniLabel = document.getElementById('exportModeUploadIniLabel');
+      const selRadio = document.getElementById('exportModeDraftSelection');
+      if (draftSelLabel) draftSelLabel.textContent = `Current selection (${selectedCount})`;
+      if (draftAllLabel) draftAllLabel.textContent = `All items in list (${allDraftCount})`;
+      if (uploadIniLabel) uploadIniLabel.textContent = `All saved items in upload.ini (${persistedHosts.size})`;
+      if (selRadio) selRadio.checked = true;
+
+      const modalEl = document.getElementById('exportOptionsModal');
+      const modal = new bootstrap.Modal(modalEl, {});
+      modal.show();
+    }
+
+    async function finalizeExport() {
+      const modeEl = document.querySelector('input[name="exportMode"]:checked');
+      const mode = modeEl ? modeEl.value : 'draft_selection';
+
+      let hosts = [];
+      let exportAll = false;
+
+      if (mode === 'draft_selection') {
+        hosts = dedupeHosts(Array.from(selectedKeys));
+        if (hosts.length === 0) {
+          alert('No selected hosts to export.');
+          return;
+        }
+      } else if (mode === 'draft_all') {
+        hosts = getAllDraftHosts();
+        if (hosts.length === 0) {
+          alert('No hosts in current device list to export.');
+          return;
+        }
+      } else {
+        exportAll = true;
+      }
+
+      try {
+        const res = await fetch('/api/export_ini', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hosts: hosts, export_all: exportAll })
+        });
+        if (res.ok) {
+          const blob = await res.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = "upload.ini";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        } else {
+          alert("Export failed");
+        }
+      } catch (e) {
+        console.error(e);
+        alert("Export error");
+      } finally {
+        const modalEl = document.getElementById('exportOptionsModal');
+        const modal = bootstrap.Modal.getInstance(modalEl);
+        if (modal) modal.hide();
+      }
+    }
+
+    function applyImportToDraft() {
+      if (!pendingImportHosts || pendingImportHosts.length === 0) return;
+
+      const modeEl = document.querySelector('input[name="importMode"]:checked');
+      const mode = modeEl ? modeEl.value : 'merge';
+
+      if (mode === 'replace') selectedKeys.clear();
+      pendingImportHosts.forEach(h => selectedKeys.add(h));
+
+      lastResults = ensureResultsContainHosts(lastResults, Array.from(selectedKeys));
+      render(lastResults);
+      updateDraftBanner();
+
+      const modalEl = document.getElementById('importPreviewModal');
+      const modal = bootstrap.Modal.getInstance(modalEl);
+      if (modal) modal.hide();
+
+      pendingImportHosts = [];
+    }
+
+    function discardDraftHosts() {
+      if (!confirm('Discard unsaved current device list changes and revert to upload.ini?')) return;
+      selectedKeys.clear();
+      persistedHosts.forEach(h => selectedKeys.add(h));
+      pruneDraftHostSettings(Array.from(persistedHosts));
+      lastResults = ensureResultsContainHosts(lastResults, Array.from(selectedKeys));
+      render(lastResults);
+      updateDraftBanner();
+    }
+
+    // Initial fetch of firmware list
+    async function fetchFirmwareList() {
+      try {
+        const res = await fetch('/api/firmware');
+        if (res.ok) {
+          const data = await res.json();
+          availableFirmwareFiles = data.files || [];
+          // Trigger re-render if we have rows
+          if (lastResults.length > 0) {
+            render(lastResults);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to fetch firmware list", e);
+      }
+    }
+
+    async function fetchConfigList() {
+      try {
+        const res = await fetch('/api/config');
+        if (res.ok) {
+          const data = await res.json();
+          availableConfigFiles = data.files || [];
+          // Trigger re-render if we have rows
+          if (lastResults.length > 0) {
+            render(lastResults);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to fetch config list", e);
+      }
+    }
+
+    async function fetchSslList() {
+      try {
+        const res = await fetch('/api/ssl');
+        if (res.ok) {
+          const data = await res.json();
+          availableSslFiles = data.files || [];
+          if (lastResults.length > 0) render(lastResults);
+        }
+      } catch (e) { console.error(e); }
+    }
+
+    const firmwareText = (r) => {
+      const parts = [];
+      if (r.initial_firmware) {
+        const initialLabel = r.status_only ? 'current' : 'previous';
+        parts.push(`${r.initial_firmware} (${initialLabel})`);
+      }
+      if (r.final_firmware && r.final_firmware !== r.initial_firmware) {
+        parts.push(`${r.final_firmware} (current)`);
+      } else if (r.latest_known_firmware) {
+        const date = (r.latest_publish_date && String(r.latest_publish_date).trim()) ? ` ${r.latest_publish_date}` : '';
+        const label = r.target_is_custom ? 'selected' : 'latest';
+        parts.push(`${r.latest_known_firmware} (${label}${date ? ' ' + r.latest_publish_date : ''})`);
+      }
+      return parts.join(', ');
+    };
+
+    function rowKey(r) {
+      if (r.ip) return String(r.ip);
+      if (r.conn_host && r.conn_port) return `${r.conn_host}:${r.conn_port}`;
+      return '';
+    }
+
+    function getModelGroup(r) {
+      // Use selected_prodid if available (resolved model), else product name
+      return r.selected_prodid || r.product_name || "Unknown";
+    }
+
+    function getChangeTargets(changedKey) {
+      // If edited row is selected, apply to all selected rows; otherwise only to edited row.
+      if (selectedKeys.has(changedKey) && selectedKeys.size > 0) {
+        return Array.from(selectedKeys);
+      }
+      return [changedKey];
+    }
+
+    function createFirmwareSelect(r, key) {
+      const currentSelection = firmwareOverrides[key] || 'onlineupdate';
+
+      let options = `<option value="onlineupdate" ${currentSelection === 'onlineupdate' ? 'selected' : ''}>Online Update (Default)</option>`;
+      options += `<option value="__no_update__" ${currentSelection === '__no_update__' ? 'selected' : 'style="color:gray;"'}>No Update</option>`;
+
+      // Recommended files (matching model ID if visible in name, or simplistic check)
+      // Since we don't have complex matching logic in JS easily, we show all files but maybe group/sort?
+      // Let's just list all files for now, but maybe put recent valid ones on top if we could.
+      // For simplicity: List all.
+
+      if (availableFirmwareFiles.length > 0) {
+        options += `<optgroup label="Available Files">`;
+        availableFirmwareFiles.forEach(f => {
+          const sel = currentSelection === f.name ? 'selected' : '';
+          options += `<option value="${f.name}" ${sel}>${f.name}</option>`;
+        });
+        options += `</optgroup>`;
+      }
+
+      options += `<option value="__upload__">Upload / Add Firmware...</option>`;
+
+      return `<select class="form-select form-select-sm fw-select" data-key="${key}" style="width: 180px;">${options}</select>`;
+    }
+
+    function createConfigSelect(r, key) {
+      const currentSelection = configOverrides[key] || '';
+
+      let options = `<option value="" ${currentSelection === '' ? 'selected' : ''}>Do not modify</option>`;
+      options += `<option value="RESET" ${currentSelection === 'RESET' ? 'selected' : 'style="color:red;"'}>Factory Reset</option>`;
+
+      if (availableConfigFiles.length > 0) {
+        options += `<optgroup label="Available Configs">`;
+        availableConfigFiles.forEach(f => {
+          const sel = currentSelection === f.name ? 'selected' : '';
+          options += `<option value="${f.name}" ${sel}>${f.name}</option>`;
+        });
+        options += `</optgroup>`;
+      }
+
+      options += `<option value="__upload_config__">Upload / Add Config...</option>`;
+
+      return `<select class="form-select form-select-sm cfg-select" data-key="${key}" style="width: 140px;">${options}</select>`;
+    }
+
+    function createSslSelect(r, key) {
+      const currentSelection = sslOverrides[key] || '';
+      let options = `<option value="" ${currentSelection === '' ? 'selected' : ''}>Do not modify</option>`;
+      options += `<option value="__no_cert__" ${currentSelection === '__no_cert__' ? 'selected' : 'style="color:gray;"'}>No Certificate</option>`;
+
+      if (availableSslFiles.length > 0) {
+        options += `<optgroup label="Available Certs">`;
+        availableSslFiles.forEach(f => {
+          const sel = currentSelection === f.name ? 'selected' : '';
+          options += `<option value="${f.name}" ${sel}>${f.name}</option>`;
+        });
+        options += `</optgroup>`;
+      }
+      options += `<option value="__upload_ssl__">Upload / Add SSL...</option>`;
+      return `<select class="form-select form-select-sm ssl-select" data-key="${key}" style="width: 140px;">${options}</select>`;
+    }
+
+    function render(results) {
+      const rows = results.map(r => {
+        const key = rowKey(r);
+        const model = getModelGroup(r);
+        modelMap[key] = model;
+        const modelEncoded = encodeURIComponent(model || "Unknown");
+        const checked = selectedKeys.has(key) ? 'checked' : '';
+        const checkbox = `<input type="checkbox" class="row-select" data-key="${key}" ${checked} />`;
+
+        // Merged Device Info: Product (Bold) <br> MAC <br> IP Link
+        const deviceInfo = `
+          <div class="d-flex flex-column">
+            <span class="fw-bold">${r.product_name || 'Unknown'}</span>
+            <a href="#" class="model-link badge rounded-pill bg-light text-dark border text-decoration-none align-self-start mt-1"
+               data-key="${key}" data-model="${modelEncoded}" title="Select all devices with this model">${model || 'Unknown'}</a>
+            <span class="text-700 fs-10">${r.hostname || '-'}</span>
+            <span class="text-600 fs-10">${(r.mac || '').replace(/_/g, ':')}</span>
+            ${r.url ? `<a href="${r.url}" class="text-decoration-none" target="_blank" rel="noopener">${r.conn_host}:${r.conn_port}</a>` : (r.ip || '')}
+          </div>`;
+
+        // Merged Settings: FW <br> Config <br> SSL
+        // Using flex for alignment
+        const settings = `
+          <div class="d-flex flex-column gap-1">
+             <div class="d-flex align-items-center">
+               <span class="text-700 fs-10" style="width:45px">FW:</span>
+               ${createFirmwareSelect(r, key)}
+             </div>
+             <div class="d-flex align-items-center">
+               <span class="text-700 fs-10" style="width:45px">Cfg:</span>
+               ${createConfigSelect(r, key)}
+             </div>
+             <div class="d-flex align-items-center">
+               <span class="text-700 fs-10" style="width:45px">SSL:</span>
+               ${createSslSelect(r, key)}
+             </div>
+          </div>`;
+
+
+        const noteText = r.firmware_status || r.firmware_upload_notes || '';
+        const noteClass = (noteText === 'status only, no changes made') ? 'text-secondary' : 'text-primary fw-bold';
+
+        return [
+          checkbox,
+          r.success ? '✓' : '✗', // Status (Hidden)
+          deviceInfo,
+          firmwareText(r),
+          settings,
+          `<div class="${noteClass}">${noteText}</div>`,
+          r.error_message || ''
+        ];
+      });
+
+      if (!table) {
+        table = new $.fn.dataTable.Api($('#devicesTable').DataTable({
+          data: rows,
+          columns: [
+            { title: '<div class="form-check mb-0"><input class="form-check-input" id="selectAllHead" type="checkbox" aria-label="Select all" /></div>', orderable: false, searchable: false, className: 'text-center', width: '1%' },
+            { title: 'Status', visible: false }, // Hidden as requested
+            { title: 'Device Info' },
+            { title: 'Firmware Info' },
+            { title: 'Settings', orderable: false },
+            { title: 'Notes' },
+            { title: 'Error' }
+          ],
+          pageLength: 10,
+          lengthMenu: [[5, 10, 25, 50, -1], [5, 10, 25, 50, "All"]],
+          // Layout: Top-left filter; bottom info (left), length (center), pagination (right)
+          // Note: using 'dom' to create a split header: search on left, actions on right
+          dom: "<'row dt-top text-start'<'col-sm-12 col-md-6'f><'col-sm-12 col-md-6 text-end dt-top-actions'>>" +
+            "t" +
+            "<'row dt-bottom'<'col-sm-12 col-md-4'i><'col-sm-12 col-md-4 text-center'l><'col-sm-12 col-md-4'p>>",
+          initComplete: function () {
+            injectToolbarButtons();
+          }
+        }));
+
+        // Helpers
+        function filteredKeys() {
+          const keys = [];
+          if (!table) return keys;
+          table.rows({ search: 'applied' }).every(function () {
+            const row = this.data();
+            const html = row && row[0] ? String(row[0]) : '';
+            const m = html.match(/data-key=\"([^\"]*)\"/);
+            if (m) keys.push(m[1]);
+          });
+          return keys;
+        }
+        function syncVisibleCheckboxes() {
+          $('#devicesTable tbody input.row-select').each(function () {
+            const key = this.getAttribute('data-key') || '';
+            this.checked = selectedKeys.has(key);
+          });
+        }
+        function updateHeaderSelectAllState() {
+          const header = document.getElementById('selectAll');
+          if (!header || !table) return;
+          const keys = filteredKeys();
+          const total = keys.length;
+          let selected = 0;
+          for (const k of keys) { if (selectedKeys.has(k)) selected++; }
+          header.indeterminate = selected > 0 && selected < total;
+          header.checked = total > 0 && selected === total;
+        }
+
+        // Selection Events
+        $('#devicesTable').on('change', '#selectAll, #selectAllHead', function () {
+          const checked = this.checked;
+          const keys = filteredKeys();
+          keys.forEach(k => { if (checked) selectedKeys.add(k); else selectedKeys.delete(k); });
+          syncVisibleCheckboxes();
+          updateHeaderSelectAllState();
+          updateDraftBanner();
+        });
+        $('#devicesTable').on('change', 'tbody input.row-select', function () {
+          const key = this.getAttribute('data-key') || '';
+          if (this.checked) selectedKeys.add(key); else selectedKeys.delete(key);
+          updateHeaderSelectAllState();
+          updateDraftBanner();
+        });
+        $('#devicesTable tbody').on('click', '.model-link', function (e) {
+          e.preventDefault();
+          const model = decodeURIComponent(String($(this).data('model') || ''));
+          const key = String($(this).data('key') || '');
+          if (!model) return;
+
+          selectedKeys.clear();
+          Object.keys(modelMap).forEach(k => {
+            if (modelMap[k] === model) selectedKeys.add(k);
+          });
+          if (key) selectedKeys.add(key);
+
+          syncVisibleCheckboxes();
+          updateHeaderSelectAllState();
+          updateDraftBanner();
+        });
+        $('#devicesTable').on('draw.dt', function () {
+          syncVisibleCheckboxes();
+          updateHeaderSelectAllState();
+        });
+
+        // Dropdown Events (Firmware)
+        $('#devicesTable tbody').on('change', '.fw-select', function () {
+          const val = $(this).val();
+          const key = $(this).data('key');
+          if (val === '__upload__') {
+            $(this).val(firmwareOverrides[key] || 'onlineupdate');
+            activeUploadKey = key;
+            document.getElementById('fwUploadInput').click();
+            return;
+          }
+          const targets = getChangeTargets(key);
+          targets.forEach(k => {
+            firmwareOverrides[k] = val;
+            const sel = $(`.fw-select[data-key="${k}"]`);
+            if (sel.length) sel.val(val);
+          });
+        });
+
+        // Dropdown Events (Config)
+        $('#devicesTable tbody').on('change', '.cfg-select', function () {
+          const val = $(this).val();
+          const key = $(this).data('key');
+          if (val === '__upload_config__') {
+            $(this).val(configOverrides[key] || '');
+            activeUploadKey = key;
+            document.getElementById('cfgUploadInput').click();
+            return;
+          }
+          const targets = getChangeTargets(key);
+          targets.forEach(k => {
+            configOverrides[k] = val;
+            const sel = $(`.cfg-select[data-key="${k}"]`);
+            if (sel.length) sel.val(val);
+          });
+        });
+
+        // Dropdown Events (SSL)
+        $('#devicesTable tbody').on('change', '.ssl-select', function () {
+          const val = $(this).val();
+          const key = $(this).data('key');
+          if (val === '__upload_ssl__') {
+            $(this).val(sslOverrides[key] || '');
+            activeUploadKey = key;
+            document.getElementById('sslUploadInput').click();
+            return;
+          }
+          const targets = getChangeTargets(key);
+          targets.forEach(k => {
+            sslOverrides[k] = val;
+            const sel = $(`.ssl-select[data-key="${k}"]`);
+            if (sel.length) sel.val(val);
+          });
+        });
+
+        // Initial Data Fetch
+        fetchFirmwareList();
+        fetchConfigList();
+        fetchSslList();
+
+      } else {
+        table.clear();
+        table.rows.add(rows);
+        table.draw(false);
+      }
+    }
+
+    function injectToolbarButtons() {
+      if (document.getElementById('refreshBtn')) return;
+
+      // Move buttons to the Card Header for better layout stability
+      // Target the card header which contains the "Devices" title
+      let container = document.querySelector('.card-header.d-flex');
+
+      // Fallback (though unlikely to fail if HTML structure is static)
+      if (!container) {
+        container = document.querySelector('#devicesTable_wrapper .dt-top-actions');
+      }
+
+      if (!container) {
+        const filter = document.querySelector('#devicesTable_wrapper .dataTables_filter');
+        if (filter) container = filter;
+      }
+
+      if (!container) {
+        console.warn("Could not find toolbar container for buttons.");
+        return;
+      }
+
+      // Create a wrapper for our buttons to ensure they wrap properly
+      // and don't break the search input line if it's too crowded.
+      var btnGroup = document.createElement('div');
+      // d-inline-flex to sit next to search if possible, flex-wrap to allow wrapping
+      // gap-1 for spacing between buttons
+      btnGroup.className = 'd-inline-flex flex-wrap align-items-center ms-2 gap-1';
+
+      // Find Devices
+      var searchBtn = document.createElement('button');
+      searchBtn.id = 'findBtn';
+      searchBtn.type = 'button';
+      searchBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn';
+      searchBtn.innerHTML = '<svg class="fas svg-h-8 me-2" aria-hidden="true" focusable="false" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M505 442.7L405.3 343c28.4-34.9 45.7-79.5 45.7-128C451 96.5 354.5 0 231 0S11 96.5 11 215s96.5 215 220 215c48.5 0 93.1-17.3 128-45.7L442.7 505c9.4 9.4 24.6 9.4 33.9 0l28.3-28.3c9.5-9.4 9.5-24.6.1-33.9zM231 367c-83.7 0-152-68.3-152-152S147.3 63 231 63s152 68.3 152 152-68.3 152-152 152z"></path></svg>Find Devices';
+      searchBtn.onclick = runFind;
+
+      // Refresh
+      var runBtn = document.createElement('button');
+      runBtn.id = 'refreshBtn';
+      runBtn.type = 'button';
+      runBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn';
+      //runBtn.innerHTML = '<svg class="fas svg-h-8 me-2" aria-hidden="true" focusable="false" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M370.72 133.28C339.458 104.008 298.888 87.962 255.848 88c-77.458.068-144.328 53.178-162.791 126.85-1.344 5.363-6.122 9.15-11.651 9.15H24.103c-7.498 0-13.194-6.807-11.807-14.176C33.933 94.924 134.813 8 256 8c66.448 0 126.791 26.136 171.315 68.685L463.03 40.97C478.149 25.851 504 36.559 504 57.941V192c0 13.255-10.745 24-24 24H345.941c-21.382 0-32.09-25.851-16.971-40.971l41.75-41.749zM32 296h134.059c21.382 0 32.09 25.851 16.971 40.971l-41.75 41.75c31.262 29.273 71.835 45.319 114.876 45.28 77.418-.07 144.315-53.144 162.787-126.849 1.344-5.363 6.122-9.15 11.651-9.15h57.304c7.498 0 13.194 6.807 11.807 14.176C478.067 417.076 377.187 504 256 504c-66.448 0-126.791-26.136-171.315-68.685L48.97 471.03C33.851 486.149 8 475.441 8 454.059V320c0-13.255 10.745-24 24-24z"></path></svg>Refresh';
+      runBtn.innerHTML = '';
+      runBtn.onclick = runRefresh;
+
+      // Add Device
+      var addBtn = document.createElement('button');
+      addBtn.type = 'button';
+      addBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn';
+      addBtn.innerHTML = '<span class="fas fa-plus me-1"></span>Add Device';
+      addBtn.title = "Add single device to current device list";
+      addBtn.onclick = handleAddDevice;
+
+      // Import INI
+      var importBtn = document.createElement('button');
+      importBtn.type = 'button';
+      importBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn';
+      importBtn.innerHTML = '<span class="fas fa-file-import me-1"></span>Import Device List';
+      importBtn.title = "Import into current device list selection (preview first)";
+      importBtn.onclick = handleImport;
+
+      // Export INI
+      var exportBtn = document.createElement('button');
+      exportBtn.type = 'button';
+      exportBtn.className = 'btn fs-10 btn-outline-secondary fw-bold dt-toolbar-btn';
+      exportBtn.innerHTML = '<span class="fas fa-file-export me-1"></span>Export Device List';
+      exportBtn.title = "Export from current device list selection, current device list (all), or stored device list (upload.ini)";
+      exportBtn.onclick = handleExport;
+
+      // Update
+      var updBtn = document.createElement('button');
+      updBtn.id = 'updateBtn';
+      updBtn.type = 'button';
+      updBtn.className = 'btn fs-10 btn-outline-primary fw-bold dt-toolbar-btn';
+      updBtn.innerHTML = '<svg class="fas svg-h-8 me-2" aria-hidden="true" focusable="false" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M255.545 8c-66.269.119-126.438 26.233-170.86 68.685L48.971 40.971C33.851 25.851 8 36.559 8 57.941V192c0 13.255 10.745 24 24 24h134.059c21.382 0 32.09-25.851 16.971-40.971l-41.75-41.75c30.864-28.899 70.801-44.907 113.23-45.273 92.398-.798 170.283 73.977 169.484 169.442C423.236 348.009 349.816 424 256 424c-41.127 0-79.997-14.678-110.63-41.556-4.743-4.161-11.906-3.908-16.368.553L89.34 422.659c-4.872 4.872-4.631 12.815.482 17.433C133.798 479.813 192.074 504 256 504c136.966 0 247.999-111.033 248-247.998C504.001 119.193 392.354 7.755 255.545 8z"></path></svg>Update';
+      updBtn.onclick = runUpdate;
+
+      // Add to group
+      btnGroup.appendChild(searchBtn);
+      //btnGroup.appendChild(runBtn);
+      btnGroup.appendChild(addBtn);
+      btnGroup.appendChild(importBtn);
+      btnGroup.appendChild(exportBtn);
+      btnGroup.appendChild(updBtn);
+
+      container.appendChild(btnGroup);
+
+      // Spinner
+      var spinDiv = document.createElement('div');
+      spinDiv.id = 'globalSpinner';
+      spinDiv.className = 'spinner ms-2';
+      container.appendChild(spinDiv);
+    }
+
+    async function fetchDevices() {
+      const res = await fetch('/api/devices');
+      const data = await res.json();
+
+      // Merge progress into results or handle separately
+      const progressMap = data.progress || {};
+      let results = data.results || [];
+
+      // Update results with progress info if running
+      results.forEach(r => {
+        let prog = progressMap[r.ip];
+        if (!prog && r.conn_host && progressMap[r.conn_host]) {
+          prog = progressMap[r.conn_host];
+        }
+
+        if (prog) {
+          if (prog.status && String(prog.status).startsWith('Rebooting')) {
+            r.firmware_status = prog.status;
+            r.firmware_upload_notes = '';
+          } else if (prog.progress < 100) {
+            r.firmware_status = `Uploading ${Math.round(prog.progress)}%`;
+            r.firmware_upload_notes = prog.status || 'uploading';
+          } else if (prog.status === 'checking') {
+            r.firmware_status = 'Checking...';
+          } else {
+            // Completed or other status (progress 100%)
+            r.firmware_status = prog.status;
+            if (prog.error) r.error_message = prog.error;
+          }
+        }
+      });
+
+      captureNotifications(results);
+      results = ensureResultsContainHosts(results, Array.from(selectedKeys));
+      lastResults = results; // Cache for re-rednering if firmware list updates
+      render(results);
+      updateSpinner(data.running);
+      updateDraftBanner();
+      return data.running;
+    }
+
+    function updateSpinner(isRunning) {
+      const s = document.getElementById('globalSpinner');
+      if (s) {
+        if (isRunning) s.classList.add('visible');
+        else s.classList.remove('visible');
+      }
+      // Also update buttons state if needed, though they might be handled by run* functions locally
+      // run* functions disable them, but if we refresh page while running, we want them disabled?
+      // For now relying on run* functions for button state, spinner for global status.
+      const btns = ['findBtn', 'refreshBtn', 'updateBtn'];
+      btns.forEach(bid => {
+        const b = document.getElementById(bid);
+        if (b) b.disabled = isRunning;
+      });
+    }
+
+    async function runFind() {
+      try {
+        // const btn = document.getElementById('findBtn');
+        // if (btn) btn.disabled = true; 
+        // Managed by updateSpinner now to persist state across polls
+        await fetch('/api/run');
+        let running = true;
+        while (running) {
+          running = await fetchDevices();
+          await new Promise(r => setTimeout(r, 1000));
+        }
+      } catch (e) {
+        console.error(e);
+      }
+      // Finally block removed as updateSpinner handles enabling via polling result
+    }
+
+    async function runRefresh(enableGbl = true) {
+      if (typeof enableGbl !== 'boolean') enableGbl = true; // Default to true if event object passed
+
+      try {
+        const hosts = Array.from(selectedKeys);
+        if (hosts.length > 0) {
+          // Run status check for selected devices
+          await fetch('/api/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ hosts })
+          });
+        } else {
+          // Run global search/status
+          // Pass gbl flag
+          await fetch('/api/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ gbl: enableGbl })
+          });
+        }
+
+        let running = true;
+        while (running) {
+          running = await fetchDevices();
+          await new Promise(r => setTimeout(r, 1000));
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    let pendingUpdateData = null;
+
+    async function runUpdate() {
+      try {
+        const hosts = Array.from(selectedKeys);
+        if (hosts.length === 0) {
+          alert('Please select at least one device.');
+          return;
+        }
+
+        // Prepare data for the review dialog
+        // We need to build the overrides AND the table rows for display
+        const overrides = {};
+        const customFirmwareOverrides = {};
+        const confOverrides = {};
+        const sslOverridesToSend = {};
+
+        const reviewRows = [];
+
+        hosts.forEach(ip => {
+          // Get basic info for the table
+          // We need to find the row data in 'lastResults' to be accurate or modelMap
+          // Let's use lastResults to find the matching result object
+          const rowData = lastResults.find(r => rowKey(r) === ip) || { ip: ip, product_name: 'Unknown' };
+
+          // Firmware Logic
+          const fwSource = firmwareOverrides[ip];
+          let fwDisplay = "Online Update"; // default
+          let fwAction = "onlineupdate";
+
+          if (fwSource) {
+            if (fwSource === '__no_update__') {
+              fwDisplay = '<span class="text-400">No Change</span>';
+              fwAction = '__no_update__';
+            } else if (fwSource === 'onlineupdate') {
+              fwDisplay = "Online Update";
+              fwAction = 'onlineupdate';
+            } else {
+              fwDisplay = `<span class="fw-bold text-primary">${fwSource}</span>`;
+              fwAction = fwSource;
+            }
+          }
+
+          if (fwAction !== 'onlineupdate' && fwAction !== '__no_update__' && fwAction) {
+            const modelID = modelMap[ip];
+            if (modelID) {
+              overrides[modelID] = {
+                "filename": fwAction,
+                "version": "custom_selection_" + new Date().getTime()
+              };
+            }
+          } else if (fwAction === '__no_update__') {
+            // Per-device skip flag so "No Update" is honored even when online update is enabled.
+            customFirmwareOverrides[ip] = '__no_update__';
+          }
+
+          // Config Logic
+          const cfgSource = configOverrides[ip];
+          let cfgDisplay = '<span class="text-400">No Change</span>';
+          if (cfgSource) {
+            if (cfgSource === 'RESET') {
+              cfgDisplay = '<span class="text-danger fw-bold">Factory Reset</span>';
+              confOverrides[ip] = 'RESET';
+            } else if (cfgSource !== '') {
+              cfgDisplay = `<span class="fw-bold text-primary">${cfgSource}</span>`;
+              confOverrides[ip] = cfgSource;
+            }
+          }
+
+          // SSL Logic
+          const sslSource = sslOverrides[ip];
+          let sslDisplay = '<span class="text-400">No Change</span>';
+          if (sslSource) {
+            if (sslSource === '__no_cert__') {
+              sslDisplay = '<span class="text-muted">No Certificate</span>';
+              sslOverridesToSend[ip] = '__no_cert__';
+            } else if (sslSource !== '') {
+              sslDisplay = `<span class="fw-bold text-primary">${sslSource}</span>`;
+              sslOverridesToSend[ip] = sslSource;
+            }
+          }
+
+          reviewRows.push(`
+            <tr>
+              <td>
+                <div class="fw-bold">${rowData.product_name || 'Unknown'}</div>
+                <div class="fs-10 text-700">${rowData.hostname || '-'}</div>
+                <div class="fs-10 text-600">${ip}</div>
+              </td>
+              <td>${fwDisplay}</td>
+              <td>${cfgDisplay}</td>
+              <td>${sslDisplay}</td>
+            </tr>
+          `);
+        });
+
+        // Populate table
+        document.getElementById('updateConfirmTableBody').innerHTML = reviewRows.join('');
+
+        // Store payload for final execution
+        pendingUpdateData = {
+          hosts,
+          firmware_overrides: overrides,
+          custom_firmware: customFirmwareOverrides,
+          config_overrides: confOverrides,
+          ssl_overrides: sslOverridesToSend,
+          forcefw: false
+        };
+
+        const forceFwCb = document.getElementById('updateConfirmForceFw');
+        if (forceFwCb) forceFwCb.checked = false;
+
+        // Show Modal
+        var myModal = new bootstrap.Modal(document.getElementById('updateConfirmModal'), {});
+        myModal.show();
+
+      } catch (e) {
+        console.error(e);
+        alert('Error preparing update review.');
+      }
+    }
+
+    async function finalizeUpdate() {
+      if (!pendingUpdateData) return;
+      const forceFwCb = document.getElementById('updateConfirmForceFw');
+      pendingUpdateData.forcefw = !!(forceFwCb && forceFwCb.checked);
+
+      // Hide modal
+      const modalEl = document.getElementById('updateConfirmModal');
+      const modal = bootstrap.Modal.getInstance(modalEl);
+      if (modal) modal.hide();
+
+      try {
+        await fetch('/api/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(pendingUpdateData)
+        });
+
+        pendingUpdateData = null; // Clear
+
+        // Start polling
+        let running = true;
+        while (running) {
+          running = await fetchDevices();
+          await new Promise(r => setTimeout(r, 1000));
+        }
+      } catch (e) {
+        console.error(e);
+        alert('Update request failed. See console for details.');
+      }
+    }
+
+
+
+    // File Upload Handling
+    let activeUploadKey = null;
+    const fileInput = document.getElementById('fwUploadInput');
+    fileInput.addEventListener('change', async function () {
+      if (!this.files || !this.files[0]) return;
+      const file = this.files[0];
+      // simplified: send raw binary via body, pass filename in header
+      // avoids multipart parser dependency/complexity issues in backend
+      try {
+        const res = await fetch('/api/upload_firmware', {
+          method: 'POST',
+          headers: {
+            'X-Filename': file.name,
+            'Content-Type': 'application/octet-stream'
+          },
+          body: file
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const filename = data.filename;
+          // Refresh list
+          // Update overrides FIRST, then refresh list which triggers render
+          if (activeUploadKey) {
+            const targets = getChangeTargets(activeUploadKey);
+            targets.forEach(k => { firmwareOverrides[k] = filename; });
+          }
+
+          await fetchFirmwareList();
+        } else {
+          alert('Upload failed: ' + await res.text());
+        }
+      } catch (e) {
+        console.error(e);
+        alert('Upload failed');
+      }
+      this.value = ''; // reset
+    });
+
+    const cfgInput = document.getElementById('cfgUploadInput');
+    cfgInput.addEventListener('change', async function () {
+      if (!this.files || !this.files[0]) return;
+      const file = this.files[0];
+      try {
+        const res = await fetch('/api/upload_config', {
+          method: 'POST',
+          headers: {
+            'X-Filename': file.name,
+            'Content-Type': 'application/octet-stream'
+          },
+          body: file
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const filename = data.filename;
+
+          if (activeUploadKey) {
+            const targets = getChangeTargets(activeUploadKey);
+            targets.forEach(k => { configOverrides[k] = filename; });
+          }
+
+          await fetchConfigList();
+        } else {
+          alert('Config upload failed: ' + await res.text());
+        }
+      } catch (e) {
+        console.error(e);
+        alert('Config upload failed');
+      }
+      this.value = '';
+    });
+
+    const sslInput = document.getElementById('sslUploadInput');
+    sslInput.addEventListener('change', async function () {
+      if (!this.files || !this.files[0]) return;
+      const file = this.files[0];
+      try {
+        const res = await fetch('/api/upload_ssl', {
+          method: 'POST',
+          headers: {
+            'X-Filename': file.name,
+            'Content-Type': 'application/octet-stream'
+          },
+          body: file
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const filename = data.filename;
+          if (activeUploadKey) {
+            const targets = getChangeTargets(activeUploadKey);
+            targets.forEach(k => { sslOverrides[k] = filename; });
+          }
+          await fetchSslList();
+        } else {
+          alert('SSL upload failed: ' + await res.text());
+        }
+      } catch (e) { console.error(e); alert('SSL upload failed'); }
+      this.value = '';
+    });
+
+    // INI Import Logic
+    const iniImportInput = document.getElementById('iniImportInput');
+    iniImportInput.addEventListener('change', async function () {
+      if (!this.files || !this.files[0]) return;
+      const file = this.files[0];
+      try {
+        const content = await file.text();
+        const importedHosts = parseHostsFromIniText(content);
+        if (importedHosts.length === 0) {
+          alert('No valid [hosts] entries found in imported file.');
+        } else {
+          showImportPreview(importedHosts, file.name);
+        }
+      } catch (e) { console.error(e); alert('Import preview failed'); }
+      this.value = '';
+    });
+
+
+    // --- New Feature Handlers ---
+
+    function handleAddDevice() {
+      // Reset form
+      document.getElementById('addDeviceForm').reset();
+      document.getElementById('authFields').style.display = 'none';
+      var myModal = new bootstrap.Modal(document.getElementById('addDeviceModal'), {});
+      myModal.show();
+    }
+
+    document.getElementById('newDevAuth').addEventListener('change', function () {
+      document.getElementById('authFields').style.display = this.checked ? 'block' : 'none';
+    });
+
+    function submitNewDevice() {
+      const ipRaw = normalizeHostKey(document.getElementById('newDevIp').value);
+      if (!ipRaw) { alert("IP is required"); return; }
+
+      const portRaw = normalizeHostKey(document.getElementById('newDevPort').value);
+      let hostKey = ipRaw;
+      if (portRaw && !ipRaw.includes(':')) hostKey = `${ipRaw}:${portRaw}`;
+
+      const settings = {
+        'ssl': document.getElementById('newDevSsl').checked ? '1' : '0',
+        'auth': document.getElementById('newDevAuth').checked ? '1' : '0',
+        'username': document.getElementById('newDevUser').value || '',
+        'password': document.getElementById('newDevPass').value || ''
+      };
+      if (portRaw) settings['port'] = portRaw;
+      draftHostSettings[hostKey] = settings;
+
+      const alreadySelected = selectedKeys.has(hostKey);
+      selectedKeys.add(hostKey);
+      lastResults = ensureResultsContainHosts(lastResults, Array.from(selectedKeys));
+      render(lastResults);
+      updateDraftBanner();
+
+      const modalEl = document.getElementById('addDeviceModal');
+      const modal = bootstrap.Modal.getInstance(modalEl);
+      if (modal) modal.hide();
+
+      if (alreadySelected) {
+        alert("Device already existed in the current device list. Stored dialog settings were updated.");
+      }
+    }
+
+    function handleImport() {
+      document.getElementById('iniImportInput').click();
+    }
+
+    function handleExport() {
+      showExportOptions();
+    }
+
+
+    async function handleSaveIni() {
+      const hosts = Array.from(selectedKeys);
+      const hostSettings = {};
+      hosts.forEach(h => {
+        if (draftHostSettings[h]) hostSettings[h] = draftHostSettings[h];
+      });
+
+      let msg = "Apply current device list to upload.ini?";
+      if (hosts.length === 0) {
+        msg = "Current device list is empty. This will clear [hosts] in upload.ini. Continue?";
+      }
+
+      if (!confirm(msg)) return false;
+
+      try {
+        const res = await fetch('/api/save_ini_selection', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hosts: hosts, host_settings: hostSettings })
+        });
+        if (res.ok) {
+          persistedHosts = new Set(hosts);
+          pruneDraftHostSettings(hosts);
+          updateDraftBanner();
+          alert("Current device list applied (upload.ini updated).");
+          return true;
+        } else {
+          alert("Failed to apply current device list to upload.ini.");
+          return false;
+        }
+      } catch (e) {
+        console.error(e);
+        alert("Error applying current device list to upload.ini.");
+        return false;
+      }
+    }
+
+    window.addEventListener('beforeunload', function (e) {
+      const dirty = Array.from(selectedKeys).some(h => !persistedHosts.has(h)) ||
+        Array.from(persistedHosts).some(h => !selectedKeys.has(h));
+      if (!dirty) return;
+      e.preventDefault();
+      e.returnValue = '';
+    });
+
+    window.addEventListener('pagehide', function () {
+      closeUiSession();
+    });
+
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) {
+        pingUiSession();
+      }
+    });
+
+    window.addEventListener('pageshow', function (event) {
+      if (event.persisted) {
+        openUiSession().then(() => {
+          startUiSessionHeartbeat();
+          pingUiSession();
+        });
+      }
+    });
+
+    const markNotificationsReadLink = document.getElementById('markNotificationsRead');
+    if (markNotificationsReadLink) {
+      markNotificationsReadLink.addEventListener('click', markAllNotificationsRead);
+    }
+    renderNotifications();
+
+    // Auto-load upload.ini at startup:
+    // 1) read persisted hosts from upload.ini for draft baseline
+    // 2) run refresh without UDP broadcast to query hosts from INI
+    (async function initPage() {
+      await openUiSession();
+      startUiSessionHeartbeat();
+      await loadPersistedHostsFromDisk();
+      await runRefresh(false);
+      fetchFirmwareList();
+    })();
+
+    // Vertical menu collapse/open with animation + persistence
+    (function () {
+      var btn = document.querySelector('.navbar-vertical-toggle');
+      if (btn) {
+        btn.addEventListener('click', function () {
+          var html = document.documentElement;
+          var collapsed = html.classList.toggle('navbar-vertical-collapsed');
+          localStorage.setItem('isNavbarVerticalCollapsed', collapsed);
+        });
+      }
+    })();
+  </script>
+</body>
+
+</html>
