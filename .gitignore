@@ -182,4 +182,6 @@ config/costum_192.168.210.192_config.txt
 /*_rg_*_log_*.txt
 /git_rebase_and_sqash.txt
 /uploa_old.ini
+/gude-upload-*-windows-x64.exe
+/release-notes*.md
 config/set_label_*.txt
