@@ -578,16 +578,16 @@ def parse_args() -> Tuple[Namespace, ConfigParser, ConfigParser, str]:
     """
     log.debug("Parsing args ...")
     parser = ArgumentParser(
-        description="Gude Systems firmware/config uploader (CLI + WebUI).",
+        description="GUDE Device Manager (GDM) for firmware, configuration, and certificate deployment.",
         formatter_class=RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
             "  1) List devices via UDP/GBL broadcast (status only):\n"
-            "     upload.py -S -G\n"
+            "     gdm -S -G\n"
             "  2) Update one device using online firmware:\n"
-            "     upload.py -o -i 192.168.2.99\n"
+            "     gdm -o -i 192.168.2.99\n"
             "  3) Start Web UI (no parameters):\n"
-            "     upload.py\n"
+            "     gdm\n"
         ),
     )
     parser.add_argument('-c', '--configip', help='ip address to select config')

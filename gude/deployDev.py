@@ -45,7 +45,7 @@ class DeployDev(HttpDevice):
             # If explicit name provided (e.g. via UI upload), treat as priority.
             # We assume it's in the same subdir (e.g. config/foo.txt) if it's just a filename.
             # If it's a full path, os.path.join handles it (on windows, absolute path triggers override behavior).
-            # But usually we just get the basename from the UI logic/upload.py.
+            # But usually we just get the basename from the UI or CLI entry logic.
             cfg_filename = os.path.join(subdir, explicit_filename)
             if os.path.exists(cfg_filename):
                  log.info(f"- Explicit match: {cfg_filename}")

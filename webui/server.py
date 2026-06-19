@@ -14,14 +14,14 @@ import logging
 log = logging.getLogger("webui")
 
 """
-Web UI server for the gude uploader.
+Web UI server for GUDE Device Manager.
 
 Enhancements:
 - Robust asset discovery for both source and PyInstaller one-file builds.
 - Optional auto-open of the default browser.
 """
 
-# Ensure repository root is on sys.path so we can import upload.py when running this file directly
+# Ensure repository root is on sys.path so we can import the entry module when running this file directly
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
